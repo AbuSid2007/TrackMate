@@ -88,15 +88,7 @@ uvicorn app.main:app --reload
 docker-compose up --build
 ```
 
-### 2. Run Tests
-
-```bash
-cd backend
-pip install aiosqlite  # for in-memory test DB
-pytest -v
-```
-
-### 3. Flutter App
+### 2. Flutter App
 
 ```bash
 cd mobile
@@ -119,15 +111,6 @@ flutter run
 
 ---
 
-## Auth Flow
-
-1. User selects role (Trainee / Trainer / Admin) and submits credentials
-2. Backend validates credentials + role match, returns `access_token` + `refresh_token`
-3. Flutter stores tokens in `flutter_secure_storage` (encrypted)
-4. Dio interceptor attaches `Bearer` token to every request automatically
-5. On 401, interceptor attempts silent refresh before re-routing to login
-
----
 
 ## Environment Variables (Backend)
 
