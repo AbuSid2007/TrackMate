@@ -4,6 +4,9 @@ import 'dashboard_page.dart';
 import 'food_logging_page.dart';
 import 'exercise_selection_page.dart';
 import 'analytics_page.dart';
+import 'calendar_page.dart';
+import 'social_trainers_page.dart';
+import 'find_a_trainer_page.dart';
 
 Future<void> checkLoginAndDo(BuildContext context, VoidCallback onLoginSuccess) async {
   final prefs = await SharedPreferences.getInstance();
@@ -146,9 +149,9 @@ class _MainLayoutState extends State<MainLayout> {
               ListTile(leading: const Icon(Icons.restaurant), title: const Text('Food Logging'), onTap: () => _selectPage(const FoodLoggingPage(), 'Food Logging')),
               ListTile(leading: const Icon(Icons.timer), title: const Text('Exercise & Timer'), onTap: () => _selectPage(const ExerciseSelectionPage(), 'Exercise & Timer')),
               ListTile(leading: const Icon(Icons.bar_chart), title: const Text('Analytics'), onTap: () => _selectPage(const AnalyticsPage(), 'Analytics')),
-              ListTile(leading: const Icon(Icons.calendar_month), title: const Text('Activity Calendar'), onTap: () => _selectPage(const Center(child: Text("Calendar Coming Soon")), 'Activity Calendar')),
-              ListTile(leading: const Icon(Icons.people), title: const Text('Social & Trainers'), onTap: () => _selectPage(const Center(child: Text("Social Coming Soon")), 'Social & Trainers')),
-              ListTile(leading: const Icon(Icons.search), title: const Text('Find a Trainer'), onTap: () => _selectPage(const Center(child: Text("Find Trainer Coming Soon")), 'Find a Trainer')),
+              ListTile(leading: const Icon(Icons.calendar_month), title: const Text('Activity Calendar'), onTap: () => _selectPage(const TrackMateCalendar(), 'Activity Calendar')),
+              ListTile(leading: const Icon(Icons.people), title: const Text('Social & Trainers'), onTap: () => _selectPage(const SocialTrainersPage(), 'Social & Trainers')),
+              ListTile(leading: const Icon(Icons.search), title: const Text('Find a Trainer'), onTap: () => _selectPage(const FindTrainerPage(), 'Find a Trainer')),
             ],
 
             // --- TRAINER MENU ---
