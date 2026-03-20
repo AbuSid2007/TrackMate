@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../shared/theme/app_theme.dart';
-import '../../../../shared/widgets/role_selector.dart';
 import '../../../../shared/widgets/tm_text_field.dart';
-import '../../domain/entities/user_entity.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
@@ -23,7 +21,6 @@ class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
-  UserRole _selectedRole = UserRole.trainee;
 
   @override
   void dispose() {
@@ -39,8 +36,7 @@ class _RegisterPageState extends State<RegisterPage> {
     context.read<AuthBloc>().add(AuthRegisterEvent(
           email: _emailController.text.trim(),
           password: _passwordController.text,
-          fullName: _nameController.text.trim(),
-          role: _selectedRole,
+          fullName: _nameController.text.trim()
         ));
   }
 
@@ -124,20 +120,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Select Role',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            RoleSelector(
-                              selected: _selectedRole,
-                              onChanged: (r) => setState(() => _selectedRole = r),
-                            ),
-                            const SizedBox(height: 20),
+                            
 
                             TmTextField(
                               label: 'Full Name',
@@ -234,17 +217,20 @@ class _RegisterPageState extends State<RegisterPage> {
                           'Already have an account? ',
                           style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
                         ),
-                        GestureDetector(
-                          onTap: widget.onNavigateToLogin,
-                          child: const Text(
-                            'Sign in',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        
+                      TextButton(
+                        onPressed: widget.onNavigateToLogin,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          foregroundColor: AppColors.primary,
                         ),
+                        child: const Text(
+                          'Sign in',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+)
                       ],
                     ),
                   ],

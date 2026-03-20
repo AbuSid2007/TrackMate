@@ -22,9 +22,6 @@ class ApiConstants {
   static const String logout = '$apiVersion/auth/logout';
   static const String refresh = '$apiVersion/auth/refresh';
   static const String me = '$apiVersion/auth/me';
-
-  // Token storage keys
-  static const String accessTokenKey = 'access_token';
-  static const String refreshTokenKey = 'refresh_token';
-  static const String userRoleKey = 'user_role';
+  static const String resendVerification = '$apiVersion/auth/resend-verification';
+  static const String verifyEmail = '$apiVersion/auth/verify-email';
 }
