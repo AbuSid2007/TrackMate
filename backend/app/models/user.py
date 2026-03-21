@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import enum
 from app.db.base import Base
-
+from app.models.profile import UserProfile
 
 class UserRole(str, enum.Enum):
     TRAINEE = "trainee"
@@ -64,6 +64,10 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    profile: Mapped["UserProfile | None"] = relationship(
+        "UserProfile", back_populates="user", uselist=False
     )
 
     def __repr__(self) -> str:

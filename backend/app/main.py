@@ -9,7 +9,7 @@ from app.core.security import hash_password
 from app.db.base import AsyncSessionLocal
 from app.models.user import User, UserRole, TrainerStatus
 from app.api.v1.router import api_router
-
+from app.core.redis import close_redis
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,8 +35,8 @@ async def lifespan(app: FastAPI):
 
     print(f"TrackMate API starting in [{settings.APP_ENV}] mode")
     yield
+    await close_redis()
     print("TrackMate API shutting down")
-
 
 app = FastAPI(
     title="TrackMate API",

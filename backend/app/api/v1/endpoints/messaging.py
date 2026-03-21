@@ -1,0 +1,351 @@
+import json
+import uuid
+from datetime import datetime, timezone
+from sqlalchemy import select, and_, func
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
+
+from app.db.base import get_db, AsyncSessionLocal
+from app.api.v1.deps import get_current_user
+from app.models.user import User
+from app.models.messaging import ConversationMember, Message
+from app.services.messaging_service import messaging_service
+from app.services.presence_service import presence_service
+from app.services.connection_manager import manager
+from app.services.auth_service import auth_service
+from app.core.exceptions import NotFoundError
+
+
+class StartConversationRequest(BaseModel):
+    other_user_id: uuid.UUID
+
+
+router = APIRouter(prefix="/messaging", tags=["Messaging"])
+
+
+# ─── REST ────────────────────────────────────────────────────────────────────
+
+@router.post("/conversations", status_code=status.HTTP_201_CREATED)
+async def start_conversation(
+    payload: StartConversationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User).where(
+            and_(
+                User.id == payload.other_user_id,
+                User.is_active == True,
+                User.is_verified == True,
+            )
+        )
+    )
+    other_user = result.scalar_one_or_none()
+    if not other_user:
+        raise NotFoundError("User")
+
+    conv = await messaging_service.get_or_create_conversation(
+        db, current_user.id, payload.other_user_id
+    )
+    return {
+        "conversation_id": str(conv.id),
+        "other_user": {
+            "id": str(other_user.id),
+            "full_name": other_user.full_name,
+            "email": other_user.email,
+        }
+    }
+
+
+@router.get("/conversations")
+async def list_conversations(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await messaging_service.get_conversations(db, current_user.id)
+
+
+@router.get("/conversations/{conversation_id}/messages")
+async def get_messages(
+    conversation_id: uuid.UUID,
+    before: datetime | None = Query(default=None),
+    limit: int = Query(default=50, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    messages = await messaging_service.get_messages(
+        db, conversation_id, current_user.id, before, limit
+    )
+    return [
+        {
+            "id": str(m.id),
+            "conversation_id": str(m.conversation_id),
+            "sender_id": str(m.sender_id),
+            "content": m.content,
+            "status": m.status,
+            "is_deleted": m.is_deleted,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in messages
+    ]
+
+
+@router.put("/conversations/{conversation_id}/read", status_code=status.HTTP_200_OK)
+async def mark_read(
+    conversation_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    conv = await messaging_service.get_conversation(
+        db, conversation_id, current_user.id
+    )
+    await messaging_service.mark_read(db, conversation_id, current_user.id)
+
+    other_member = next(
+        (m for m in conv.members if str(m.user_id) != str(current_user.id)),
+        None,
+    )
+    if other_member:
+        await manager.send(str(other_member.user_id), {
+            "type": "messages_read",
+            "conversation_id": str(conversation_id),
+            "read_by": str(current_user.id),
+        })
+
+    return {"message": "Marked as read"}
+
+
+@router.delete("/messages/{message_id}", status_code=status.HTTP_200_OK)
+async def delete_message(
+    message_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    msg = await messaging_service.delete_message(db, message_id, current_user.id)
+    return {"message": "Deleted", "message_id": str(msg.id)}
+
+
+@router.get("/users/{user_id}/presence")
+async def get_user_presence(
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+):
+    online = await presence_service.is_online(str(user_id))
+    last_seen = await presence_service.get_last_seen(str(user_id))
+    return {
+        "user_id": str(user_id),
+        "online": online,
+        "last_seen": last_seen,
+    }
+
+
+@router.post("/ws-ticket", status_code=status.HTTP_200_OK)
+async def get_ws_ticket(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    ticket = await presence_service.create_ws_ticket(str(current_user.id))
+    return {"ticket": ticket}
+
+
+# ─── WebSocket ───────────────────────────────────────────────────────────────
+
+@router.websocket("/ws")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    ticket: str = Query(...),
+):
+    await websocket.accept()
+
+    user_id_str = await presence_service.consume_ws_ticket(ticket)
+    if not user_id_str:
+        await websocket.close(code=4001, reason="Invalid or expired ticket")
+        return
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(User).where(User.id == uuid.UUID(user_id_str))  # convert to UUID
+        )
+        user = result.scalar_one_or_none()
+        if not user or not user.is_active:
+            await websocket.close(code=4001, reason="User not found")
+            return
+
+    user_id = str(user.id)
+    manager._connections[user_id] = websocket
+    await presence_service.set_online(user_id)
+    await _broadcast_presence(user_id, online=True)
+
+# Push unread summary to client on connect
+    async with AsyncSessionLocal() as db:
+        memberships_result = await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.user_id == user.id
+            )
+        )
+        memberships = memberships_result.scalars().all()
+
+        unread_conversations = []
+        for membership in memberships:
+            unread_result = await db.execute(
+                select(func.count(Message.id)).where(
+                    and_(
+                        Message.conversation_id == membership.conversation_id,
+                        Message.sender_id != user.id,
+                        Message.created_at > (
+                            membership.last_read_at or
+                            datetime.min.replace(tzinfo=timezone.utc)
+                        ),
+                    )
+                )
+            )
+            count = unread_result.scalar_one()
+            if count > 0:
+                unread_conversations.append({
+                    "conversation_id": str(membership.conversation_id),
+                    "unread_count": count,
+                })
+
+        if unread_conversations:
+            await manager.send(user_id, {
+                "type": "unread_summary",
+                "conversations": unread_conversations,
+            })
+            
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = data.get("type")
+
+            # ── Send message ──────────────────────────────────────────────
+            if msg_type == "send_message":
+                conversation_id = data.get("conversation_id")
+                content = data.get("content", "").strip()
+                if not conversation_id or not content:
+                    continue
+
+                async with AsyncSessionLocal() as db:
+                    try:
+                        conv_uuid = uuid.UUID(conversation_id)
+                        conv = await messaging_service.get_conversation(
+                            db, conv_uuid, user.id
+                        )
+                        msg = await messaging_service.save_message(
+                            db, conv_uuid, user.id, content
+                        )
+                        await db.commit()
+                        await db.refresh(msg)
+
+                        payload = {
+                            "type": "new_message",
+                            "message": {
+                                "id": str(msg.id),
+                                "conversation_id": str(msg.conversation_id),
+                                "sender_id": str(msg.sender_id),
+                                "content": msg.content,
+                                "status": msg.status,
+                                "created_at": msg.created_at.isoformat(),
+                            },
+                        }
+
+                        other = next(
+                            (m for m in conv.members if str(m.user_id) != user_id),
+                            None,
+                        )
+                        if other:
+                            delivered = await manager.send(str(other.user_id), payload)
+                            if delivered:
+                                async with AsyncSessionLocal() as db2:
+                                    await messaging_service.mark_delivered(db2, msg.id)
+                                    await db2.commit()
+                                payload["message"]["status"] = "delivered"
+
+                        await manager.send(user_id, payload)
+
+                    except Exception as e:
+                        await db.rollback()
+                        await manager.send(user_id, {
+                            "type": "error",
+                            "message": str(e),
+                        })
+
+            # ── Mark read ─────────────────────────────────────────────────
+            elif msg_type == "mark_read":
+                conversation_id = data.get("conversation_id")
+                if not conversation_id:
+                    continue
+
+                async with AsyncSessionLocal() as db:
+                    try:
+                        conv_uuid = uuid.UUID(conversation_id)
+                        conv = await messaging_service.get_conversation(
+                            db, conv_uuid, user.id
+                        )
+                        await messaging_service.mark_read(db, conv_uuid, user.id)
+                        await db.commit()
+
+                        other = next(
+                            (m for m in conv.members if str(m.user_id) != user_id),
+                            None,
+                        )
+                        if other:
+                            await manager.send(str(other.user_id), {
+                                "type": "messages_read",
+                                "conversation_id": conversation_id,
+                                "read_by": user_id,
+                            })
+                    except Exception:
+                        await db.rollback()
+
+            # ── Typing ───────────────────────────────────────────────────
+            elif msg_type == "typing":
+                conversation_id = data.get("conversation_id")
+                if not conversation_id:
+                    continue
+
+                await presence_service.set_typing(conversation_id, user_id)
+
+                async with AsyncSessionLocal() as db:
+                    try:
+                        conv = await messaging_service.get_conversation(
+                            db, uuid.UUID(conversation_id), user.id
+                        )
+                        other = next(
+                            (m for m in conv.members if str(m.user_id) != user_id),
+                            None,
+                        )
+                        if other:
+                            await manager.send(str(other.user_id), {
+                                "type": "typing",
+                                "conversation_id": conversation_id,
+                                "user_id": user_id,
+                            })
+                    except Exception:
+                        pass
+
+            # ── Heartbeat ─────────────────────────────────────────────────
+            elif msg_type == "heartbeat":
+                await presence_service.heartbeat(user_id)
+                await manager.send(user_id, {"type": "heartbeat_ack"})
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(user_id)
+        await presence_service.set_offline(user_id)
+        await _broadcast_presence(user_id, online=False)
+
+
+async def _broadcast_presence(user_id: str, online: bool) -> None:
+    payload = {
+        "type": "user_online" if online else "user_offline",
+        "user_id": user_id,
+    }
+    for connected_user_id in list(manager._connections.keys()):
+        if connected_user_id != user_id:
+            await manager.send(connected_user_id, payload)

@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""
     ADMIN_FULL_NAME: str = "Admin"
+    
+    REDIS_URL: str = "redis://localhost:6379"
 
     @property
     def cors_origins_list(self) -> List[str]:
