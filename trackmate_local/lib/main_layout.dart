@@ -12,6 +12,9 @@ import 'trainer_requests_calendar_page.dart';
 import 'admin_dashboard_page.dart';
 import 'admin_manage_trainers_page.dart';
 import 'admin_manage_reports_page.dart';
+import 'settings_page.dart';
+import 'login_page.dart';
+
 
 Future<void> checkLoginAndDo(
   BuildContext context,
@@ -221,46 +224,13 @@ class _MainLayoutState extends State<MainLayout> {
 
             // --- USER MENU ---
             if (isUser) ...[
-              ListTile(
-                leading: const Icon(Icons.dashboard),
-                title: const Text('Dashboard'),
-                onTap: () => _selectPage(const DashboardPage(), 'Dashboard'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.restaurant),
-                title: const Text('Food Logging'),
-                onTap: () =>
-                    _selectPage(const FoodLoggingPage(), 'Food Logging'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.timer),
-                title: const Text('Exercise & Timer'),
-                onTap: () => _selectPage(
-                  const ExerciseSelectionPage(),
-                  'Exercise & Timer',
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.bar_chart),
-                title: const Text('Analytics'),
-                onTap: () => _selectPage(const AnalyticsPage(), 'Analytics'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.calendar_month),
-                title: const Text('Activity Calendar'),
-                onTap: () => _selectPage(
-                  const Center(child: Text("Calendar Coming Soon")),
-                  'Activity Calendar',
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.people),
-                title: const Text('Social & Trainers'),
-                onTap: () => _selectPage(
-                  const Center(child: Text("Social Coming Soon")),
-                  'Social & Trainers',
-                ),
-              ),
+              ListTile(leading: const Icon(Icons.dashboard), title: const Text('Dashboard'), onTap: () => _selectPage(const DashboardPage(), 'Dashboard')),
+              ListTile(leading: const Icon(Icons.restaurant), title: const Text('Food Logging'), onTap: () => _selectPage(const FoodLoggingPage(), 'Food Logging')),
+              ListTile(leading: const Icon(Icons.timer), title: const Text('Exercise & Timer'), onTap: () => _selectPage(const ExerciseSelectionPage(), 'Exercise & Timer')),
+              ListTile(leading: const Icon(Icons.bar_chart), title: const Text('Analytics'), onTap: () => _selectPage(const AnalyticsPage(), 'Analytics')),
+              ListTile(leading: const Icon(Icons.calendar_month), title: const Text('Activity Calendar'), onTap: () => _selectPage(const TrackMateCalendar(), 'Activity Calendar')),
+              ListTile(leading: const Icon(Icons.people), title: const Text('Social & Trainers'), onTap: () => _selectPage(const SocialTrainersPage(), 'Social & Trainers')),
+              ListTile(leading: const Icon(Icons.search), title: const Text('Find a Trainer'), onTap: () => _selectPage(const FindTrainerPage(), 'Find a Trainer')),
               
             ],
 
@@ -306,13 +276,30 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             ],
 
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () => _selectPage(const SettingsPage(), 'Settings'),
+            ),
+
+
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Logout', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                // Return to login screen
-                Navigator.popUntil(context, (route) => route.isFirst);
+              onTap: () async {
+                // 1. Wipe the saved login memory
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+
+                // 2. Navigate to Login Page AND clear all previous history
+                if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                        (Route<dynamic> route) => false,
+                  );
+                }
               },
             ),
           ],
