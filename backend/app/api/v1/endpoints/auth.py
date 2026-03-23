@@ -96,26 +96,6 @@ async def verify_email(
     _set_auth_cookies(response, auth.tokens)
     return auth
 
-@router.post("/admin/trainer-applications", response_model=UserResponse, status_code=status.HTTP_200_OK)
-async def approve_trainer(
-    payload: ApproveTrainerRequest,
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
-) -> UserResponse:
-    user = await auth_service.approve_trainer(db, str(payload.user_id), payload.approve, admin)
-    return UserResponse.model_validate(user)
-
-
-@router.post("/admin/assign-trainer", response_model=UserResponse, status_code=status.HTTP_200_OK)
-async def assign_trainer(
-    trainee_id: uuid.UUID,
-    trainer_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
-) -> UserResponse:
-    trainee = await auth_service.assign_trainer(db, str(trainee_id), str(trainer_id))
-    return UserResponse.model_validate(trainee)
-
 @router.post("/resend-verification", response_model=MessageResponse, status_code=status.HTTP_200_OK)
 async def resend_verification(
     payload: ResendVerificationRequest,

@@ -1,0 +1,201 @@
+import uuid
+from datetime import datetime
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
+from typing import Optional
+
+from app.db.base import get_db
+from app.api.v1.deps import get_current_user, require_trainer
+from app.models.user import User
+from app.services.trainer_service import trainer_service
+
+router = APIRouter(prefix="/trainer", tags=["Trainer"])
+
+
+class TrainerApplicationRequest(BaseModel):
+    phone_number: Optional[str] = None
+    experience_years: Optional[int] = None
+    about: Optional[str] = None
+    specializations: Optional[str] = None
+    certifications: Optional[str] = None
+    hourly_rate: Optional[float] = None
+
+
+class TrainerRequestBody(BaseModel):
+    trainer_id: uuid.UUID
+    goal: str
+
+
+class RespondToRequestBody(BaseModel):
+    accept: bool
+
+
+class ScheduleSessionRequest(BaseModel):
+    trainee_id: uuid.UUID
+    scheduled_at: datetime
+    duration_minutes: int = 60
+    notes: Optional[str] = None
+
+
+class AddNoteRequest(BaseModel):
+    content: str
+
+
+# ── Trainer Application ───────────────────────────────────────────────────────
+
+@router.post("/apply", status_code=status.HTTP_201_CREATED)
+async def submit_application(
+    payload: TrainerApplicationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    app = await trainer_service.submit_application(
+        db, current_user,
+        payload.phone_number, payload.experience_years,
+        payload.about, payload.specializations,
+        payload.certifications, payload.hourly_rate,
+    )
+    return {"application_id": str(app.id), "status": app.status}
+
+
+# ── Trainee: Browse & Request Trainers ────────────────────────────────────────
+
+@router.get("/available", status_code=status.HTTP_200_OK)
+async def get_available_trainers(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await trainer_service.get_available_trainers(db)
+
+
+@router.post("/request", status_code=status.HTTP_201_CREATED)
+async def send_trainer_request(
+    payload: TrainerRequestBody,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    req = await trainer_service.send_trainer_request(
+        db, current_user, payload.trainer_id, payload.goal
+    )
+    return {"request_id": str(req.id), "status": req.status}
+
+
+@router.get("/my-trainer", status_code=status.HTTP_200_OK)
+async def get_my_trainer(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.trainer_id:
+        return {"trainer": None}
+    from sqlalchemy import select
+    from app.models.user import User as UserModel
+    result = await db.execute(
+        select(UserModel).where(UserModel.id == current_user.trainer_id)
+    )
+    trainer = result.scalar_one_or_none()
+    if not trainer:
+        return {"trainer": None}
+    return {
+        "trainer": {
+            "id": str(trainer.id),
+            "full_name": trainer.full_name,
+            "email": trainer.email,
+        }
+    }
+
+
+# ── Trainer: Manage Students ──────────────────────────────────────────────────
+
+@router.get("/students", status_code=status.HTTP_200_OK)
+async def get_students(
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    return await trainer_service.get_students(db, trainer.id)
+
+
+@router.get("/students/{trainee_id}", status_code=status.HTTP_200_OK)
+async def get_student_detail(
+    trainee_id: uuid.UUID,
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    return await trainer_service.get_student_detail(db, trainer.id, trainee_id)
+
+
+@router.post("/students/{trainee_id}/notes", status_code=status.HTTP_201_CREATED)
+async def add_note(
+    trainee_id: uuid.UUID,
+    payload: AddNoteRequest,
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    note = await trainer_service.add_note(db, trainer, trainee_id, payload.content)
+    return {"note_id": str(note.id), "content": note.content, "created_at": note.created_at.isoformat()}
+
+
+@router.get("/stats", status_code=status.HTTP_200_OK)
+async def get_trainer_stats(
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    return await trainer_service.get_stats(db, trainer.id)
+
+
+# ── Trainer: Requests ─────────────────────────────────────────────────────────
+
+@router.get("/requests", status_code=status.HTTP_200_OK)
+async def get_trainer_requests(
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    requests = await trainer_service.get_trainer_requests(db, trainer.id)
+    return [
+        {
+            "request_id": str(r.id),
+            "trainee": {"id": str(r.trainee_id), "full_name": r.trainee.full_name},
+            "goal": r.goal,
+            "status": r.status,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in requests
+    ]
+
+
+@router.put("/requests/{request_id}", status_code=status.HTTP_200_OK)
+async def respond_to_request(
+    request_id: uuid.UUID,
+    payload: RespondToRequestBody,
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    req = await trainer_service.respond_to_trainer_request(db, request_id, trainer, payload.accept)
+    return {"request_id": str(req.id), "status": req.status}
+
+
+# ── Trainer: Calendar ─────────────────────────────────────────────────────────
+
+@router.get("/calendar", status_code=status.HTTP_200_OK)
+async def get_calendar(
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    return await trainer_service.get_calendar(db, trainer.id)
+
+
+@router.post("/calendar/sessions", status_code=status.HTTP_201_CREATED)
+async def schedule_session(
+    payload: ScheduleSessionRequest,
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await trainer_service.schedule_session(
+        db, trainer, payload.trainee_id,
+        payload.scheduled_at, payload.duration_minutes, payload.notes,
+    )
+    return {
+        "session_id": str(session.id),
+        "scheduled_at": session.scheduled_at.isoformat(),
+        "duration_minutes": session.duration_minutes,
+    }

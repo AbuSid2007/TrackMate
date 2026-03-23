@@ -70,5 +70,7 @@ class UserProfile(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    phone_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    hourly_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="profile")
