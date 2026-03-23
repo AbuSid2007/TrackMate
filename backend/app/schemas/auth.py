@@ -1,14 +1,16 @@
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 import uuid
-from app.models.user import UserRole
+from app.models.user import UserRole, TrainerStatus
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    role: UserRole = UserRole.TRAINEE
+    # role is NOT accepted from client — everyone registers as trainee
+    # set apply_as_trainer=True to enter the trainer approval queue
+    apply_as_trainer: bool = False
 
     @field_validator("password")
     @classmethod
@@ -33,7 +35,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    role: UserRole
+    # No role field — role is derived from DB
 
 
 class TokenResponse(BaseModel):
@@ -42,15 +44,13 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
 class UserResponse(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str
     role: UserRole
+    trainer_status: TrainerStatus
+    trainer_id: Optional[uuid.UUID]
     is_active: bool
     is_verified: bool
 
@@ -58,10 +58,6 @@ class UserResponse(BaseModel):
         "from_attributes": True,
         "use_enum_values": True,
     }
-
-    def model_post_init(self, __context):
-        # Ensure id is serialized as string in JSON responses
-        pass
 
 
 class AuthResponse(BaseModel):
@@ -71,3 +67,22 @@ class AuthResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class ApproveTrainerRequest(BaseModel):
+    user_id: uuid.UUID
+    approve: bool  # True = approve, False = reject
+    
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+    
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+    @field_validator("otp")
+    @classmethod
+    def validate_otp(cls, v: str) -> str:
+        if not v.isdigit() or len(v) != 6:
+            raise ValueError("OTP must be a 6-digit number")
+        return v

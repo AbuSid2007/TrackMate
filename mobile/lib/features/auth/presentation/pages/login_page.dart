@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../shared/theme/app_theme.dart';
-import '../../../../shared/widgets/role_selector.dart';
 import '../../../../shared/widgets/tm_text_field.dart';
-import '../../domain/entities/user_entity.dart';
+import '../../../../core/router/app_router.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 
 class LoginPage extends StatefulWidget {
   final VoidCallback onNavigateToRegister;
+  final bool verified;
 
-  const LoginPage({super.key, required this.onNavigateToRegister});
+  const LoginPage({
+    super.key,
+    required this.onNavigateToRegister,
+    this.verified = false,
+  });
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -21,7 +26,6 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  UserRole _selectedRole = UserRole.trainee;
 
   @override
   void dispose() {
@@ -35,7 +39,6 @@ class _LoginPageState extends State<LoginPage> {
     context.read<AuthBloc>().add(AuthLoginEvent(
           email: _emailController.text.trim(),
           password: _passwordController.text,
-          role: _selectedRole,
         ));
   }
 
@@ -51,9 +54,18 @@ class _LoginPageState extends State<LoginPage> {
                 content: Text(state.message),
                 backgroundColor: AppColors.error,
                 behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             );
+          }
+          if (state is AuthUnverifiedState) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              context.go(
+                '${AppRouter.checkEmail}?email=${Uri.encodeComponent(state.email)}',
+              );
+            });
           }
         },
         builder: (context, state) {
@@ -61,11 +73,13 @@ class _LoginPageState extends State<LoginPage> {
           return SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Logo
                     Container(
                       width: 56,
                       height: 56,
@@ -82,7 +96,10 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 16),
                     Text(
                       'TRACKMATE',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineMedium
+                          ?.copyWith(
                             color: AppColors.primary,
                             letterSpacing: 2,
                             fontSize: 18,
@@ -100,8 +117,41 @@ class _LoginPageState extends State<LoginPage> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 32),
-
-                    // Card
+                    if (widget.verified) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.success.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline_rounded,
+                              size: 18,
+                              color: AppColors.success,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Email verified. You can now log in.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: AppColors.success),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
@@ -121,22 +171,6 @@ class _LoginPageState extends State<LoginPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Role selector
-                            const Text(
-                              'Select Role',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            RoleSelector(
-                              selected: _selectedRole,
-                              onChanged: (r) => setState(() => _selectedRole = r),
-                            ),
-                            const SizedBox(height: 20),
-
                             TmTextField(
                               label: 'Email',
                               hint: 'your.email@example.com',
@@ -144,13 +178,14 @@ class _LoginPageState extends State<LoginPage> {
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
                               validator: (v) {
-                                if (v == null || v.isEmpty) return 'Email is required';
-                                if (!v.contains('@')) return 'Enter a valid email';
+                                if (v == null || v.isEmpty)
+                                  return 'Email is required';
+                                if (!v.contains('@'))
+                                  return 'Enter a valid email';
                                 return null;
                               },
                             ),
                             const SizedBox(height: 16),
-
                             TmTextField(
                               label: 'Password',
                               controller: _passwordController,
@@ -158,20 +193,21 @@ class _LoginPageState extends State<LoginPage> {
                               textInputAction: TextInputAction.done,
                               onEditingComplete: _submit,
                               validator: (v) {
-                                if (v == null || v.isEmpty) return 'Password is required';
+                                if (v == null || v.isEmpty)
+                                  return 'Password is required';
                                 return null;
                               },
                             ),
                             const SizedBox(height: 8),
-
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(
-                                onPressed: () {}, // TODO: forgot password
+                                onPressed: () {},
                                 style: TextButton.styleFrom(
                                   padding: EdgeInsets.zero,
                                   minimumSize: const Size(0, 0),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
                                 ),
                                 child: const Text(
                                   'Forgot password?',
@@ -183,8 +219,6 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                             const SizedBox(height: 20),
-
-                            // Login button
                             AnimatedSwitcher(
                               duration: const Duration(milliseconds: 200),
                               child: isLoading
@@ -192,8 +226,10 @@ class _LoginPageState extends State<LoginPage> {
                                       key: const ValueKey('loading'),
                                       height: 50,
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary.withOpacity(0.8),
-                                        borderRadius: BorderRadius.circular(10),
+                                        color:
+                                            AppColors.primary.withOpacity(0.8),
+                                        borderRadius:
+                                            BorderRadius.circular(10),
                                       ),
                                       child: const Center(
                                         child: SizedBox(
@@ -217,20 +253,27 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Text(
                           "Don't have an account? ",
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 14,
+                          ),
                         ),
-                        GestureDetector(
-                          onTap: widget.onNavigateToRegister,
+                        TextButton(
+                          onPressed: widget.onNavigateToRegister,
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            foregroundColor: AppColors.primary,
+                          ),
                           child: const Text(
                             'Sign up',
                             style: TextStyle(
-                              color: AppColors.primary,
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),

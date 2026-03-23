@@ -5,22 +5,25 @@ import '../../../../core/errors/failures.dart';
 import '../models/auth_models.dart';
 
 abstract class AuthRemoteDataSource {
-  Future<AuthResponseModel> register({
+  Future<void> register({
     required String email,
     required String password,
-    required String fullName,
-    required String role,
+  required String fullName,
+    required bool applyAsTrainer,
   });
 
   Future<AuthResponseModel> login({
     required String email,
     required String password,
-    required String role,
   });
 
   Future<void> logout();
 
-  Future<UserModel> getCurrentUser();
+  Future<UserModel> getCurrentUser();  // ADD THIS
+
+  Future<AuthResponseModel> verifyEmail({required String email, required String otp});
+
+  Future<void> resendVerification({required String email});
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -28,21 +31,21 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
   AuthRemoteDataSourceImpl(this.dio);
 
+
   @override
-  Future<AuthResponseModel> register({
+  Future<void> register({
     required String email,
     required String password,
     required String fullName,
-    required String role,
+    required bool applyAsTrainer,
   }) async {
     try {
-      final response = await dio.post(ApiConstants.register, data: {
+      await dio.post(ApiConstants.register, data: {
         'email': email,
         'password': password,
         'full_name': fullName,
-        'role': role,
+        'apply_as_trainer': applyAsTrainer,
       });
-      return AuthResponseModel.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw mapDioError(e);
     }
@@ -51,14 +54,12 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<AuthResponseModel> login({
     required String email,
-    required String password,
-    required String role,
+    required String password
   }) async {
     try {
       final response = await dio.post(ApiConstants.login, data: {
         'email': email,
-        'password': password,
-        'role': role,
+        'password': password
       });
       return AuthResponseModel.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
@@ -80,6 +81,33 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     try {
       final response = await dio.get(ApiConstants.me);
       return UserModel.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw mapDioError(e);
+    }
+  }
+
+  
+  @override
+  Future<void> resendVerification({required String email}) async {
+    try {
+      await dio.post(ApiConstants.resendVerification, data: {'email': email});
+    } on DioException catch (e) {
+      throw mapDioError(e);
+    }
+  }
+
+
+  @override
+  Future<AuthResponseModel> verifyEmail({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      final response = await dio.post(ApiConstants.verifyEmail, data: {
+        'email': email,
+        'otp': otp,
+      });
+      return AuthResponseModel.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw mapDioError(e);
     }

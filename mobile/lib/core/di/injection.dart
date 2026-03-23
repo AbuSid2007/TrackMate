@@ -23,7 +23,8 @@ void setupDependencies() {
     ),
   );
 
-  sl.registerFactory<AuthBloc>(
-    () => AuthBloc(repository: sl<AuthRepository>()),
-  );
+// Change registerFactory to registerLazySingleton:
+sl.registerLazySingleton<AuthBloc>(
+  () => AuthBloc(repository: sl<AuthRepository>()),
+);
 }

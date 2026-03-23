@@ -13,20 +13,20 @@ class AuthRepositoryImpl implements AuthRepository {
   });
 
   @override
-  Future<Either<Failure, UserEntity>> register({
+  Future<Either<Failure, void>> register({
     required String email,
     required String password,
     required String fullName,
-    required UserRole role,
+    required bool applyAsTrainer,
   }) async {
     try {
-      final result = await remoteDataSource.register(
+      await remoteDataSource.register(
         email: email,
         password: password,
         fullName: fullName,
-        role: roleToString(role),
+        applyAsTrainer: applyAsTrainer,
       );
-      return Right(_mapUser(result.user));
+      return const Right(null);
     } on Failure catch (f) {
       return Left(f);
     } catch (_) {
@@ -37,14 +37,12 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, UserEntity>> login({
     required String email,
-    required String password,
-    required UserRole role,
+    required String password
   }) async {
     try {
       final result = await remoteDataSource.login(
         email: email,
-        password: password,
-        role: roleToString(role),
+        password: password
       );
       return Right(_mapUser(result.user));
     } on Failure catch (f) {
@@ -53,6 +51,18 @@ class AuthRepositoryImpl implements AuthRepository {
       return const Left(UnknownFailure());
     }
   }
+
+  @override
+    Future<Either<Failure, void>> resendVerification({required String email}) async {
+      try {
+        await remoteDataSource.resendVerification(email: email);
+        return const Right(null);
+      } on Failure catch (f) {
+        return Left(f);
+      } catch (_) {
+        return const Left(UnknownFailure());
+      }
+    }
 
   @override
   Future<Either<Failure, void>> logout() async {
@@ -77,16 +87,7 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<bool> hasStoredSession() async {
-    // Cookie-based auth relies on cookies being present in the HTTP client.
-    // The safest way to determine if the user is logged in is to attempt to load their session.
-    try {
-      await remoteDataSource.getCurrentUser();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> hasStoredSession()  async => false;
 
   UserEntity _mapUser(UserModel model) => UserEntity(
         id: model.id,
@@ -96,4 +97,25 @@ class AuthRepositoryImpl implements AuthRepository {
         isActive: model.isActive,
         isVerified: model.isVerified,
       );
+  
+  
+  @override
+  Future<Either<Failure, UserEntity>> verifyEmail({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      final result = await remoteDataSource.verifyEmail(
+        email: email,
+        otp: otp,
+      );
+      return Right(_mapUser(result.user));
+    } on Failure catch (f) {
+      return Left(f);
+    } catch (_) {
+      return const Left(UnknownFailure());
+    }
+  }
+
 }
+
