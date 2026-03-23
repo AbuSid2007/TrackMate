@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
@@ -199,3 +199,133 @@ async def schedule_session(
         "scheduled_at": session.scheduled_at.isoformat(),
         "duration_minutes": session.duration_minutes,
     }
+    
+from app.services.fitness_service import fitness_service as fs
+
+# ── Trainer: View Student Fitness Data ───────────────────────────────────────
+
+@router.get("/students/{trainee_id}/workouts", status_code=status.HTTP_200_OK)
+async def get_student_workouts(
+    trainee_id: uuid.UUID,
+    limit: int = Query(default=20, le=100),
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify this trainee belongs to this trainer
+    from sqlalchemy import select
+    from app.models.user import User as UserModel
+    result = await db.execute(
+        select(UserModel).where(
+            UserModel.id == trainee_id,
+            UserModel.trainer_id == trainer.id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError("Student")
+
+    sessions = await fs.get_session_history(db, trainee_id, limit)
+    from app.api.v1.endpoints.fitness import _format_session
+    return [_format_session(s) for s in sessions]
+
+
+@router.get("/students/{trainee_id}/nutrition", status_code=status.HTTP_200_OK)
+async def get_student_nutrition(
+    trainee_id: uuid.UUID,
+    date: Optional[datetime] = Query(default=None),
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+    from app.models.user import User as UserModel
+    result = await db.execute(
+        select(UserModel).where(
+            UserModel.id == trainee_id,
+            UserModel.trainer_id == trainer.id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError("Student")
+
+    from datetime import timezone, date as date_type
+    target = date.date() if date else datetime.now(timezone.utc).date()
+    meals = await fs.get_meals_for_date(db, trainee_id, target)
+    summary = await fs.get_nutrition_summary(db, trainee_id, target)
+    return {
+        "summary": summary,
+        "meals": [
+            {
+                "id": str(m.id),
+                "food_name": m.food_name,
+                "servings": m.servings,
+                "calories": round(m.calories_per_100g * m.servings * m.serving_size_g / 100, 1),
+                "protein_g": round(m.protein_per_100g * m.servings * m.serving_size_g / 100, 1),
+                "logged_at": m.logged_at.isoformat(),
+            }
+            for m in meals
+        ],
+    }
+
+
+@router.get("/students/{trainee_id}/stats", status_code=status.HTTP_200_OK)
+async def get_student_stats(
+    trainee_id: uuid.UUID,
+    trainer: User = Depends(require_trainer),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+    from app.models.user import User as UserModel
+    from app.services.profile_service import profile_service
+    result = await db.execute(
+        select(UserModel).where(
+            UserModel.id == trainee_id,
+            UserModel.trainer_id == trainer.id,
+        )
+    )
+    trainee = result.scalar_one_or_none()
+    if not trainee:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError("Student")
+
+    profile = await profile_service.get_or_create_profile(db, trainee)
+    weekly = await fs.get_weekly_stats(db, trainee_id, profile.daily_step_goal)
+    streak = await fs.get_streak(db, trainee_id, profile.daily_step_goal)
+    steps_history = await fs.get_steps_history(db, trainee_id, days=7)
+    weight_trend = await fs.get_weight_trend(db, trainee_id, days=30)
+
+    return {
+        "weekly": weekly,
+        "streak_days": streak,
+        "steps_history": steps_history,
+        "weight_trend": weight_trend,
+    }
+
+
+# ── Trainee: View Own Scheduled Sessions ─────────────────────────────────────
+
+@router.get("/my-sessions", status_code=status.HTTP_200_OK)
+async def get_my_sessions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+    from app.models.trainer import TrainerSession
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(TrainerSession)
+        .where(TrainerSession.trainee_id == current_user.id)
+        .options(selectinload(TrainerSession.trainer))
+        .order_by(TrainerSession.scheduled_at)
+    )
+    sessions = result.scalars().all()
+    return [
+        {
+            "id": str(s.id),
+            "trainer": {"id": str(s.trainer_id), "full_name": s.trainer.full_name},
+            "scheduled_at": s.scheduled_at.isoformat(),
+            "duration_minutes": s.duration_minutes,
+            "notes": s.notes,
+        }
+        for s in sessions
+    ]

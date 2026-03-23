@@ -135,3 +135,45 @@ async def report_message(
         payload.reported_user_id, payload.report_type, payload.body,
     )
     return {"report_id": str(report.id), "status": report.status}
+
+@router.get("/leaderboard", status_code=status.HTTP_200_OK)
+async def get_leaderboard(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.fitness_service import fitness_service
+    from datetime import date, timedelta
+    from sqlalchemy import func
+    from app.models.fitness import StepLog
+
+    friends = await social_service.get_friends(db, current_user.id)
+    visible_ids = [f.id for f in friends] + [current_user.id]
+
+    since = date.today() - timedelta(days=7)
+    result = await db.execute(
+        select(
+            StepLog.user_id,
+            func.sum(StepLog.steps).label("total_steps"),
+        )
+        .where(
+            StepLog.user_id.in_(visible_ids),
+            StepLog.logged_date >= since,
+        )
+        .group_by(StepLog.user_id)
+        .order_by(func.sum(StepLog.steps).desc())
+    )
+    rows = result.all()
+
+    user_map = {str(f.id): f.full_name for f in friends}
+    user_map[str(current_user.id)] = current_user.full_name
+
+    return [
+        {
+            "rank": i + 1,
+            "user_id": str(row.user_id),
+            "full_name": user_map.get(str(row.user_id), "Unknown"),
+            "total_steps": row.total_steps,
+            "is_me": str(row.user_id) == str(current_user.id),
+        }
+        for i, row in enumerate(rows)
+    ]

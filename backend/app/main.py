@@ -11,32 +11,39 @@ from app.models.user import User, UserRole, TrainerStatus
 from app.api.v1.router import api_router
 from app.core.redis import close_redis
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Seed admin account from env variables if it doesn't exist yet
     if settings.ADMIN_EMAIL and settings.ADMIN_PASSWORD:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(User).where(User.email == settings.ADMIN_EMAIL)
-            )
-            if not result.scalar_one_or_none():
-                admin = User(
-                    email=settings.ADMIN_EMAIL,
-                    hashed_password=hash_password(settings.ADMIN_PASSWORD),
-                    full_name=settings.ADMIN_FULL_NAME,
-                    role=UserRole.ADMIN,
-                    trainer_status=TrainerStatus.NONE,
-                    is_active=True,
-                    is_verified=True,
+            try:
+                result = await db.execute(
+                    select(User).where(User.email == settings.ADMIN_EMAIL)
                 )
-                db.add(admin)
-                await db.commit()
-                print(f"[Startup] Admin account created: {settings.ADMIN_EMAIL}")
+                if not result.scalar_one_or_none():
+                    admin = User(
+                        email=settings.ADMIN_EMAIL,
+                        hashed_password=hash_password(settings.ADMIN_PASSWORD),
+                        full_name=settings.ADMIN_FULL_NAME,
+                        role=UserRole.ADMIN,
+                        trainer_status=TrainerStatus.NONE,
+                        is_active=True,
+                        is_verified=True,
+                    )
+                    db.add(admin)
+                    await db.commit()
+                    print(f"[Startup] Admin account created: {settings.ADMIN_EMAIL}")
+                else:
+                    print(f"[Startup] Admin already exists: {settings.ADMIN_EMAIL}")
+            except Exception as e:
+                await db.rollback()
+                print(f"[Startup] Admin seed failed: {e}")
 
     print(f"TrackMate API starting in [{settings.APP_ENV}] mode")
     yield
     await close_redis()
     print("TrackMate API shutting down")
+
 
 app = FastAPI(
     title="TrackMate API",

@@ -32,11 +32,18 @@ trackmate/
 | `admin` | Seeded from environment variables on startup |
 
 ### Trainer Application Flow
-1. User registers with `apply_as_trainer: true`
-2. Account is created with `trainer_status: pending`
-3. Admin reviews and approves or rejects via API
-4. On approval, role is updated to `trainer` and user receives an email notification
-5. On rejection, user receives a rejection email
+1. User registers normally (becomes trainee)
+2. User submits trainer application via `POST /trainer/apply`
+3. Admin reviews and approves or rejects
+4. On approval, role is updated to `trainer` and user receives email notification
+5. On rejection, user receives rejection email
+
+### Trainee → Trainer Request Flow
+1. Trainee browses available trainers via `GET /trainer/available`
+2. Trainee sends request with goal via `POST /trainer/request`
+3. Trainer sees pending requests via `GET /trainer/requests`
+4. Trainer accepts or rejects via `PUT /trainer/requests/{id}`
+5. On accept, `trainer_id` is set on the trainee and a notification is sent
 
 ### Email Notifications
 | Trigger | Email sent |
@@ -45,14 +52,30 @@ trackmate/
 | Login attempt (unverified) | New OTP resent automatically |
 | Trainer approved | Approval notification |
 | Trainer rejected | Rejection notification |
+| Friend request accepted | Notification to sender |
+| Trainer request accepted/rejected | Notification to trainee |
 
 ### Messaging
 - Real-time direct messaging via WebSocket
-- Secure ticket-based WebSocket authentication (no tokens in URL)
+- Secure one-time ticket-based WebSocket authentication (no tokens in URL)
 - Read/delivered receipts
 - Typing indicators
 - Online/offline presence with last seen
-- Offline message delivery via DB + unread summary on reconnect
+- Offline message delivery via DB — unread summary pushed on reconnect
+
+### Social
+- Friends system — send, accept, reject requests
+- Friends-only post feed with likes
+- Step count leaderboard among friends
+- Report messages to admin
+
+### Fitness Tracking
+- Workout sessions with sets (reps, weight, duration)
+- Food logging via Open Food Facts API — no API key required, Indian food coverage
+- Daily step tracking with goals and streaks
+- Hydration logging
+- Weight trend tracking
+- Weekly stats summary
 
 ---
 
@@ -197,6 +220,8 @@ flutter run
 | `activity_level` | Enum | `sedentary`, `lightly_active`, `moderately_active`, `very_active`, `extra_active` |
 | `specializations` | String | Trainer only, comma-separated |
 | `experience_years` | Integer | Trainer only |
+| `phone_number` | String | Optional |
+| `hourly_rate` | Float | Trainer only |
 
 ### conversations
 | Column | Type | Description |
@@ -225,6 +250,183 @@ flutter run
 | `created_at` | DateTime | Indexed |
 | `updated_at` | DateTime | |
 
+### friend_requests
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `sender_id` | UUID FK | References users.id |
+| `receiver_id` | UUID FK | References users.id |
+| `status` | Enum | `pending`, `accepted`, `rejected` |
+| `created_at` | DateTime | |
+
+### posts
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `author_id` | UUID FK | References users.id |
+| `content` | Text | |
+| `is_deleted` | Boolean | Soft delete |
+| `created_at` | DateTime | |
+
+### post_likes
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `post_id` | UUID FK | References posts.id |
+| `user_id` | UUID FK | References users.id |
+| `created_at` | DateTime | |
+
+### reports
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `reporter_id` | UUID FK | References users.id |
+| `reported_user_id` | UUID FK | References users.id |
+| `message_id` | UUID FK | References messages.id (nullable) |
+| `post_id` | UUID FK | References posts.id (nullable) |
+| `report_type` | Enum | `spam`, `harassment`, `inappropriate`, `other` |
+| `body` | Text | Report description |
+| `status` | Enum | `pending`, `resolved`, `dismissed` |
+| `resolved_at` | DateTime | Nullable |
+| `created_at` | DateTime | |
+
+### trainer_applications
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID FK | References users.id |
+| `phone_number` | String | Optional |
+| `experience_years` | Integer | Optional |
+| `about` | Text | Optional |
+| `specializations` | String | Comma-separated |
+| `certifications` | String | Comma-separated |
+| `hourly_rate` | Float | Optional |
+| `status` | String | `pending`, `approved`, `rejected` |
+| `submitted_at` | DateTime | |
+| `reviewed_at` | DateTime | Nullable |
+
+### trainer_requests
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `trainee_id` | UUID FK | References users.id |
+| `trainer_id` | UUID FK | References users.id |
+| `goal` | Text | Trainee's stated goal |
+| `status` | Enum | `pending`, `accepted`, `rejected` |
+| `created_at` | DateTime | |
+
+### trainer_sessions
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `trainer_id` | UUID FK | References users.id |
+| `trainee_id` | UUID FK | References users.id |
+| `scheduled_at` | DateTime | |
+| `duration_minutes` | Integer | Default 60 |
+| `notes` | Text | Optional |
+| `created_at` | DateTime | |
+
+### trainer_notes
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `trainer_id` | UUID FK | References users.id |
+| `trainee_id` | UUID FK | References users.id |
+| `content` | Text | |
+| `created_at` | DateTime | |
+
+### notifications
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID FK | References users.id |
+| `type` | Enum | `friend_request`, `friend_accepted`, `trainer_request`, `trainer_accepted`, `trainer_rejected`, `trainer_approved`, `new_message`, `post_like`, `system` |
+| `title` | String | |
+| `body` | Text | |
+| `is_read` | Boolean | Default false |
+| `reference_id` | String | ID of related object (nullable) |
+| `created_at` | DateTime | |
+
+### exercises
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `name` | String | Indexed |
+| `category` | Enum | `cardio`, `strength`, `flexibility`, `balance`, `other` |
+| `measurement_type` | Enum | `reps`, `time` |
+| `description` | Text | Optional |
+| `is_custom` | Boolean | False for built-in |
+| `created_by` | UUID FK | References users.id (nullable) |
+| `created_at` | DateTime | |
+
+### workout_sessions
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID FK | References users.id |
+| `name` | String | Optional |
+| `status` | Enum | `in_progress`, `completed`, `cancelled` |
+| `notes` | Text | Optional |
+| `calories_burned` | Float | Optional |
+| `started_at` | DateTime | |
+| `ended_at` | DateTime | Nullable |
+| `created_at` | DateTime | |
+
+### workout_sets
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `session_id` | UUID FK | References workout_sessions.id |
+| `exercise_id` | UUID FK | References exercises.id |
+| `set_number` | Integer | |
+| `reps` | Integer | Nullable |
+| `weight_kg` | Float | Nullable |
+| `duration_seconds` | Integer | Nullable |
+| `notes` | String | Optional |
+| `created_at` | DateTime | |
+
+### meal_logs
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID FK | References users.id |
+| `food_id` | String | Open Food Facts barcode/id |
+| `food_name` | String | Stored inline |
+| `calories_per_100g` | Float | |
+| `protein_per_100g` | Float | |
+| `carbs_per_100g` | Float | |
+| `fat_per_100g` | Float | |
+| `serving_size_g` | Float | |
+| `serving_label` | String | e.g. "100g", "1 cup" |
+| `servings` | Float | Number of servings logged |
+| `logged_at` | DateTime | Indexed |
+| `created_at` | DateTime | |
+
+### step_logs
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID FK | References users.id |
+| `steps` | Integer | |
+| `logged_date` | Date | One record per day (upsert) |
+| `created_at` | DateTime | |
+
+### hydration_logs
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID FK | References users.id |
+| `amount_ml` | Integer | |
+| `logged_at` | DateTime | |
+
+### weight_logs
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID FK | References users.id |
+| `weight_kg` | Float | |
+| `logged_at` | DateTime | |
+
 ---
 
 ## Tech Stack
@@ -247,4 +449,5 @@ flutter run
 - `passlib` + bcrypt — password hashing
 - `pydantic-settings` — environment config
 - `smtplib` — email delivery
+- `httpx` — async HTTP client for Open Food Facts
 - WebSockets — real-time messaging

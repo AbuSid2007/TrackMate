@@ -4,3 +4,7 @@ from app.models.messaging import Conversation, ConversationMember, Message, Mess
 from app.models.social import FriendRequest, Post, PostLike, Report
 from app.models.trainer import TrainerApplication, TrainerRequest, TrainerSession, TrainerNote
 from app.models.notification import Notification, NotificationType
+from app.models.fitness import (
+    Exercise, WorkoutSession, WorkoutSet,
+    MealLog, StepLog, HydrationLog, WeightLog
+)
