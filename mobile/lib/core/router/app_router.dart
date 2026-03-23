@@ -1,17 +1,19 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/presentation/bloc/auth_state.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/auth/presentation/pages/check_email_page.dart';
 import '../../features/auth/presentation/pages/dashboard_placeholder_page.dart';
 
 class AppRouter {
+  static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String checkEmail = '/check-email';
   static const String dashboard = '/dashboard';
-  static const String splash = '/';
 
   static GoRouter create(AuthBloc authBloc) {
     return GoRouter(
@@ -19,15 +21,40 @@ class AppRouter {
       refreshListenable: _BlocListenable(authBloc),
       redirect: (context, state) {
         final authState = authBloc.state;
-        final isAuthRoute =
-            state.matchedLocation == login || state.matchedLocation == register;
+        final loc = state.matchedLocation;
+
+        final isAuthRoute = loc == login || loc == register;
+        final isCheckEmailRoute = loc == checkEmail;
+
+        if (authState is AuthLoadingState || authState is AuthInitialState) {
+          return null;
+        }
+
+        
+        if (authState is AuthRegisteredState) {
+          if (isCheckEmailRoute) return null;
+          return '$checkEmail?email=${Uri.encodeComponent(authState.email)}';
+        }
+
+        if (authState is AuthUnverifiedState) {
+          if (isCheckEmailRoute) return null;
+          return '$checkEmail?email=${Uri.encodeComponent(authState.email)}';
+        }
+
+        if (authState is AuthVerificationSentState) {
+          return isCheckEmailRoute ? null : checkEmail;
+        }
 
         if (authState is AuthAuthenticatedState) {
-          return isAuthRoute ? dashboard : null;
+          if (isAuthRoute || isCheckEmailRoute) return dashboard;
+          return null;
         }
-        if (authState is AuthUnauthenticatedState || authState is AuthErrorState) {
+
+        if (authState is AuthUnauthenticatedState ||
+            authState is AuthErrorState) {
           return isAuthRoute ? null : login;
         }
+        
         return null;
       },
       routes: [
@@ -44,9 +71,23 @@ class AppRouter {
             onNavigateToLogin: () => context.go(login),
           ),
         ),
+        // Change checkEmail route:
+        GoRoute(
+          path: checkEmail,
+          builder: (context, state) => CheckEmailPage(
+            email: state.uri.queryParameters['email'] ?? '',
+          ),
+        ),
         GoRoute(
           path: dashboard,
           builder: (_, __) => const DashboardPlaceholderPage(),
+        ),
+        GoRoute(
+          path: login,
+          builder: (context, state) => LoginPage(
+            onNavigateToRegister: () => context.go(register),
+            verified: state.uri.queryParameters['verified'] == 'true',
+          ),
         ),
       ],
     );
@@ -54,8 +95,16 @@ class AppRouter {
 }
 
 class _BlocListenable extends ChangeNotifier {
+  late final StreamSubscription<AuthState> _sub;
+
   _BlocListenable(AuthBloc bloc) {
-    bloc.stream.listen((_) => notifyListeners());
+    _sub = bloc.stream.listen((_) => notifyListeners());
+  }
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
   }
 }
 
@@ -67,7 +116,11 @@ class _SplashPage extends StatelessWidget {
     return const Scaffold(
       backgroundColor: Color(0xFF2563EB),
       body: Center(
-        child: Icon(Icons.track_changes_rounded, color: Colors.white, size: 56),
+        child: Icon(
+          Icons.track_changes_rounded,
+          color: Colors.white,
+          size: 56,
+        ),
       ),
     );
   }

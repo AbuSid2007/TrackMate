@@ -15,35 +15,51 @@ class AuthCheckSessionEvent extends AuthEvent {
 class AuthLoginEvent extends AuthEvent {
   final String email;
   final String password;
-  final UserRole role;
 
   const AuthLoginEvent({
     required this.email,
-    required this.password,
-    required this.role,
+    required this.password
   });
 
   @override
-  List<Object?> get props => [email, password, role];
+  List<Object?> get props => [email, password];
 }
 
 class AuthRegisterEvent extends AuthEvent {
   final String email;
   final String password;
   final String fullName;
-  final UserRole role;
+  final bool applyAsTrainer;
 
   const AuthRegisterEvent({
     required this.email,
     required this.password,
     required this.fullName,
-    required this.role,
+    this.applyAsTrainer = false,
   });
 
   @override
-  List<Object?> get props => [email, password, fullName, role];
+  List<Object?> get props => [email, password, fullName, applyAsTrainer];
 }
 
 class AuthLogoutEvent extends AuthEvent {
   const AuthLogoutEvent();
+}
+
+class AuthResendVerificationEvent extends AuthEvent {
+  final String email;
+  const AuthResendVerificationEvent({required this.email});
+
+  @override
+  List<Object?> get props => [email];
+}
+
+class AuthVerifyEmailEvent extends AuthEvent {
+  final String email;
+  final String otp;
+
+  const AuthVerifyEmailEvent({required this.email, required this.otp});
+
+  @override
+  List<Object?> get props => [email, otp];
 }
