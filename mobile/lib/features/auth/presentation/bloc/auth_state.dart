@@ -55,3 +55,7 @@ class AuthUnverifiedState extends AuthState {
   @override
   List<Object?> get props => [email];
 }
+
+class AuthOnboardingState extends AuthState {
+  const AuthOnboardingState();
+}

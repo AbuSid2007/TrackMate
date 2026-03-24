@@ -15,6 +15,7 @@ import '../../features/admin/data/admin_remote_datasource.dart';
 import '../../features/trainer/data/trainer_remote_datasource.dart';
 import '../../features/social/data/social_remote_datasource.dart';
 import '../../features/notifications/data/notifications_remote_datasource.dart';
+import '../../features/messaging/data/messaging_remote_datasource.dart';
 
 final sl = GetIt.instance;
 
@@ -65,5 +66,9 @@ sl.registerLazySingleton<SocialRemoteDataSource>(
 );
 sl.registerLazySingleton<NotificationsRemoteDataSource>(
   () => NotificationsRemoteDataSource(sl<Dio>()),
+);
+
+sl.registerLazySingleton<MessagingRemoteDataSource>(
+  () => MessagingRemoteDataSource(sl<Dio>()),
 );
 }

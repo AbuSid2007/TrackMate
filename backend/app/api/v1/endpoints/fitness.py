@@ -382,3 +382,16 @@ def _format_session(session) -> dict:
             for s in (session.sets or [])
         ],
     }
+    
+@router.delete("/data/clear", status_code=status.HTTP_200_OK)
+async def clear_my_data(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import delete
+    from app.models.fitness import WorkoutSession, WorkoutSet, MealLog, StepLog, HydrationLog, WeightLog
+    for model in [WorkoutSet, WorkoutSession, MealLog, StepLog, HydrationLog, WeightLog]:
+        await db.execute(
+            delete(model).where(model.user_id == current_user.id)
+        )
+    return {"message": "All fitness data cleared"}

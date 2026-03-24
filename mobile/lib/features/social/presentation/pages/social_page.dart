@@ -19,6 +19,7 @@ class _SocialPageState extends State<SocialPage>
   late TabController _tabs;
   final _ds = SocialRemoteDataSource(sl());
 
+  final Set<String> _sentRequests = {};
   List<dynamic> _feed = [];
   List<dynamic> _friends = [];
   List<dynamic> _requests = [];
@@ -169,10 +170,10 @@ class _SocialPageState extends State<SocialPage>
                         },
                         onSendRequest: (id) async {
                           await _ds.sendFriendRequest(id);
+                          setState(() => _sentRequests.add(id));
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Friend request sent')),
+                              const SnackBar(content: Text('Friend request sent')),
                             );
                           }
                         },
@@ -348,6 +349,8 @@ class _FriendsTab extends StatelessWidget {
   final ValueChanged<String> onSendRequest;
   final Future<void> Function() onRefresh;
 
+  final Set<String> sentRequests;
+
   const _FriendsTab({
     required this.friends,
     required this.requests,
@@ -399,12 +402,27 @@ class _FriendsTab extends StatelessWidget {
                     ),
                     title: Text(user['full_name'] ?? ''),
                     subtitle: Text(user['role'] ?? ''),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.person_add,
-                          color: AppColors.primary),
-                      onPressed: () => onSendRequest(user['id']),
-                    ),
-                  );
+
+                // Replace the IconButton in search results:
+                  trailing: sentRequests.contains(user['id'])
+                      ? const Chip(
+                          label: Text('Sent', style: TextStyle(fontSize: 11)),
+                          backgroundColor: Colors.green,
+                          labelStyle: TextStyle(color: Colors.white),
+                          padding: EdgeInsets.zero,
+                        )
+                      : friends.any((f) => (f as Map)['id'] == user['id'])
+                          ? const Chip(
+                              label: Text('Added', style: TextStyle(fontSize: 11)),
+                              backgroundColor: AppColors.primary,
+                              labelStyle: TextStyle(color: Colors.white),
+                              padding: EdgeInsets.zero,
+                            )
+                          : IconButton(
+                              icon: const Icon(Icons.person_add, color: AppColors.primary),
+                              onPressed: () => onSendRequest(user['id']),
+                            ),
+                    );
                 }).toList(),
               ),
             ),

@@ -72,9 +72,7 @@ class _DashboardBody extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Expanded(child: _WaterCard(data: data)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _StatsCard(data: data)),
+                    _StatsCard(data: data),
                   ],
                 ),
               ],

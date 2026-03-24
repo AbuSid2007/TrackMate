@@ -15,6 +15,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLogoutEvent>(_onLogout);
     on<AuthResendVerificationEvent>(_onResendVerification);
     on<AuthVerifyEmailEvent>(_onVerifyEmail);
+    on<AuthCompleteOnboardingEvent>(_onCompleteOnboarding);
+
   }
 
   Future<void> _onVerifyEmail(
@@ -31,9 +33,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthErrorState(failure.message));
         emit(AuthUnverifiedState(email: event.email));
       },
-      (user) => emit(AuthAuthenticatedState(user)),
+      
+(user) => emit(const AuthOnboardingState()),
     );
   }
+
+
+Future<void> _onCompleteOnboarding(
+  AuthCompleteOnboardingEvent event,
+  Emitter<AuthState> emit,
+) async {
+  final result = await repository.getCurrentUser();
+  result.fold(
+    (failure) => emit(const AuthUnauthenticatedState()),
+    (user) => emit(AuthAuthenticatedState(user)),
+  );
+}
 
   Future<void> _onLogin(
     AuthLoginEvent event,

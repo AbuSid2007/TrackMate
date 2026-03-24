@@ -76,4 +76,5 @@ class ApiConstants {
   static const String weight = '$apiVersion/fitness/weight';
   static const String weightTrend = '$apiVersion/fitness/weight/trend';
   static const String weeklyStats = '$apiVersion/fitness/stats/weekly';
+  static const String clearData = '$apiVersion/fitness/data/clear';
 }

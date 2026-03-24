@@ -15,7 +15,18 @@ class NutritionRemoteDataSource {
       throw mapDioError(e);
     }
   }
+  Future<Map<String, dynamic>> getHydrationSummary() async {
+    try {
+      final res = await dio.get(ApiConstants.hydrationSummary);
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) { throw mapDioError(e); }
+  }
 
+  Future<void> logWater(int amountMl) async {
+    try {
+      await dio.post(ApiConstants.hydration, data: {'amount_ml': amountMl});
+    } on DioException catch (e) { throw mapDioError(e); }
+  }
   Future<Map<String, dynamic>> getNutritionSummary({String? date}) async {
     try {
       final res = await dio.get(ApiConstants.nutritionSummary,

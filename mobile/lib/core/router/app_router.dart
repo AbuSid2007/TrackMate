@@ -20,6 +20,9 @@ import '../../features/admin/presentation/pages/admin_trainers_page.dart';
 import '../../features/admin/presentation/pages/admin_reports_page.dart';
 import '../../features/social/presentation/pages/social_page.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
+import '../../features/messaging/presentation/pages/conversations_page.dart';
+import '../../features/calendar/presentation/pages/calendar_page.dart';
+import '../../features/auth/presentation/pages/onboarding_page.dart';
 
 class AppRouter {
   static const String splash = '/';
@@ -39,6 +42,9 @@ class AppRouter {
   static const String adminReports = '/admin/reports';
   static const String notifications = '/notifications';
   static const String social = '/social';
+  static const String messages = '/messages';
+  static const String calendar = '/calendar';
+  static const String onboarding = '/onboarding';
 
   static GoRouter create(AuthBloc authBloc) {
     return GoRouter(
@@ -74,7 +80,12 @@ class AppRouter {
             authState is AuthErrorState) {
           return isAuthRoute ? null : login;
         }
+
+        if (authState is AuthOnboardingState) {
+          return loc == onboarding ? null : onboarding;
+        }
         return null;
+
       },
       routes: [
         GoRoute(
@@ -127,6 +138,17 @@ class AppRouter {
         GoRoute(path: adminReports, builder: (_, __) => const AdminReportsPage()),
         GoRoute(path: social, builder: (_, __) => const SocialPage()),
         GoRoute(path: notifications, builder: (_, __) => const NotificationsPage()),
+        GoRoute(path: messages, builder: (_, __) => const ConversationsPage()),
+        GoRoute(path: calendar, builder: (_, __) => const CalendarPage()),
+        GoRoute(path: trainerCalendar, builder: (_, __) => const TrainerRequestsPage()),
+
+        GoRoute(
+            path: onboarding,
+            builder: (context, _) => OnboardingPage(
+              onComplete: () => context.read<AuthBloc>()
+                  .add(const AuthCompleteOnboardingEvent()),
+            ),
+          ),
       ],
     );
   }

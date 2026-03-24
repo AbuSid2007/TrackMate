@@ -6,6 +6,7 @@ import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../../../../shared/widgets/main_layout.dart';
 import '../../../../shared/theme/app_theme.dart';
 import '../../data/notifications_remote_datasource.dart';
+import 'package:go_router/go_router.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -26,6 +27,28 @@ class _NotificationsPageState extends State<NotificationsPage> {
     _load();
   }
 
+
+// Add method to _NotificationsPageState:
+void _routeNotification(BuildContext context, Map<String, dynamic> n) {
+  final type = n['type'] as String? ?? '';
+  switch (type) {
+    case 'friend_request':
+    case 'friend_accepted':
+      // Navigate to social tab
+      context.go('/social');
+      break;
+    case 'trainer_request':
+    case 'trainer_accepted':
+    case 'trainer_rejected':
+      context.go('/trainer/requests');
+      break;
+    case 'new_message':
+      context.go('/messages');
+      break;
+    default:
+      break;
+  }
+}
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -139,74 +162,66 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                   setState(() =>
                                       _notifications.removeAt(i));
                                 },
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: isRead
-                                        ? AppColors.surface
-                                        : AppColors.primary.withOpacity(0.04),
-                                    borderRadius:
-                                        BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isRead
-                                          ? AppColors.border
-                                          : AppColors.primary
-                                              .withOpacity(0.2),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: _colorFor(type)
-                                              .withOpacity(0.1),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          _iconFor(type),
-                                          color: _colorFor(type),
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(n['title'] ?? '',
-                                                style: TextStyle(
-                                                    fontWeight: isRead
-                                                        ? FontWeight.normal
-                                                        : FontWeight.bold)),
-                                            const SizedBox(height: 2),
-                                            Text(n['body'] ?? '',
-                                                style: const TextStyle(
-                                                    color:
-                                                        AppColors.textSecondary,
-                                                    fontSize: 13)),
-                                          ],
-                                        ),
-                                      ),
-                                      if (!isRead)
-                                        IconButton(
-                                          icon: const Icon(
-                                              Icons.check_circle_outline,
-                                              size: 18,
-                                              color: AppColors.primary),
-                                          onPressed: () async {
-                                            await _ds.markRead(n['id']);
-                                            await _load();
-                                          },
-                                        ),
-                                    ],
-                                  ),
-                                ),
+                                // Replace the Container child (remove trailing markRead IconButton) with:
+child: InkWell(
+  onTap: () {
+    if (!isRead) _ds.markRead(n['id']).then((_) => _load());
+    _routeNotification(context, n);
+  },
+  borderRadius: BorderRadius.circular(12),
+  child: Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: isRead
+          ? AppColors.surface
+          : AppColors.primary.withOpacity(0.04),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: isRead
+            ? AppColors.border
+            : AppColors.primary.withOpacity(0.2),
+      ),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            color: _colorFor(type).withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(_iconFor(type), color: _colorFor(type), size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(n['title'] ?? '',
+                  style: TextStyle(
+                      fontWeight: isRead
+                          ? FontWeight.normal
+                          : FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text(n['body'] ?? '',
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 13)),
+            ],
+          ),
+        ),
+        if (!isRead)
+          Container(
+            width: 8, height: 8,
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle,
+            ),
+          ),
+      ],
+    ),
+  ),
+),
                               );
                             },
                           ),

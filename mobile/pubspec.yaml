@@ -37,7 +37,8 @@ dependencies:
 
   # Local storage (settings only)
   shared_preferences: ^2.5.4
-
+  pedometer: ^4.0.0
+  permission_handler: ^11.3.1
   # Utils
   logger: ^2.3.0
   intl: ^0.19.0

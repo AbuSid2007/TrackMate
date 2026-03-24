@@ -13,11 +13,81 @@ class FoodLoggingPage extends StatefulWidget {
   @override
   State<FoodLoggingPage> createState() => _FoodLoggingPageState();
 }
+class _WaterSection extends StatelessWidget {
+  final Map<String, dynamic> hydration;
+  final ValueChanged<int> onLog;
 
+  const _WaterSection({required this.hydration, required this.onLog});
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMl = (hydration['total_ml'] ?? 0) as num;
+    final goalMl = (hydration['goal_ml'] ?? 2500) as num;
+    final pct = (hydration['percentage'] ?? 0.0) as num;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(children: [
+                const Icon(Icons.water_drop, color: Colors.blue, size: 18),
+                const SizedBox(width: 6),
+                const Text('Water Intake',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ]),
+              Text('${totalMl.toStringAsFixed(0)} / ${goalMl.toInt()} ml',
+                  style: const TextStyle(color: AppColors.textSecondary,
+                      fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (pct / 100).clamp(0.0, 1.0),
+              backgroundColor: AppColors.border,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+              minHeight: 8,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [250, 350, 500].map((ml) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: OutlinedButton(
+                onPressed: () => onLog(ml),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  side: const BorderSide(color: Colors.blue),
+                  foregroundColor: Colors.blue,
+                ),
+                child: Text('+${ml}ml',
+                    style: const TextStyle(fontSize: 12)),
+              ),
+            )).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
 class _FoodLoggingPageState extends State<FoodLoggingPage> {
   final _ds = NutritionRemoteDataSource(sl());
   final _searchCtrl = TextEditingController();
 
+Map<String, dynamic> _hydration = {};
   List<dynamic> _searchResults = [];
   List<dynamic> _loggedMeals = [];
   Map<String, dynamic> _summary = {};
@@ -44,10 +114,12 @@ class _FoodLoggingPageState extends State<FoodLoggingPage> {
       final results = await Future.wait([
         _ds.getNutritionSummary(),
         _ds.getMeals(),
+        _ds.getHydrationSummary(),
       ]);
       setState(() {
         _summary = results[0] as Map<String, dynamic>;
         _loggedMeals = results[1] as List<dynamic>;
+        _hydration = results[2] as Map<String, dynamic>;
       });
     } catch (_) {}
     setState(() => _loading = false);
@@ -123,6 +195,14 @@ class _FoodLoggingPageState extends State<FoodLoggingPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _MacrosCard(summary: _summary),
+                    const SizedBox(height: 16),
+                    _WaterSection(
+                      hydration: _hydration,
+                      onLog: (ml) async {
+                        await _ds.logWater(ml);
+                        await _load();
+                      },
+                    ),
                     const SizedBox(height: 16),
                     _SearchBar(
                       controller: _searchCtrl,

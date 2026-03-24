@@ -63,3 +63,6 @@ class AuthVerifyEmailEvent extends AuthEvent {
   @override
   List<Object?> get props => [email, otp];
 }
+class AuthCompleteOnboardingEvent extends AuthEvent {
+  const AuthCompleteOnboardingEvent();
+}

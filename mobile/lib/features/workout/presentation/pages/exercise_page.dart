@@ -6,7 +6,10 @@ import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../../../../shared/widgets/main_layout.dart';
 import '../../../../shared/theme/app_theme.dart';
 import '../../data/workout_remote_datasource.dart';
-
+import 'package:pedometer/pedometer.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 class ExercisePage extends StatefulWidget {
   const ExercisePage({super.key});
 
@@ -20,10 +23,29 @@ class _ExercisePageState extends State<ExercisePage> {
   List<dynamic> _history = [];
   bool _loading = true;
 
+  final _weightCtrl = TextEditingController();
+  late PedometerService _pedometer;
+  int _liveSteps = 0;
+  List<dynamic> _stepsHistory = [];
+
   @override
   void initState() {
     super.initState();
+    _pedometer = PedometerService();
+    if (!kIsWeb) {
+      _pedometer.start();
+      _pedometer.steps.listen((s) {
+        if (mounted) setState(() => _liveSteps = s);
+      });
+    }
     _load();
+  }
+
+  @override
+  void dispose() {
+    _pedometer.dispose();
+    super.dispose();
+    _weightCtrl.dispose();
   }
 
   Future<void> _load() async {
@@ -32,6 +54,12 @@ class _ExercisePageState extends State<ExercisePage> {
       _history = await _ds.getSessionHistory();
     } catch (_) {}
     setState(() => _loading = false);
+    try {
+      final res = await sl<Dio>().get(ApiConstants.stepsHistory,
+          queryParameters: {'days': 7});
+      _stepsHistory = res.data as List<dynamic>;
+    } catch (_) {}
+
   }
 
   @override
@@ -50,9 +78,54 @@ class _ExercisePageState extends State<ExercisePage> {
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
-                child: Column(
+                child: 
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Add before 'Track your workouts' text:
+                    if (!kIsWeb) ...[
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.directions_walk, color: AppColors.primary, size: 28),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Steps Today (Live)',
+                                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                  Text('$_liveSteps',
+                                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                await sl<WorkoutRemoteDataSource>().startSession();
+                                // Use fitness endpoint to log steps
+                                await sl<Dio>().post(ApiConstants.steps, data: {
+                                  'steps': _liveSteps,
+                                });
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Steps logged')),
+                                  );
+                                }
+                              },
+                              child: const Text('Log Steps'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     const Text('Track your workouts',
                         style: TextStyle(color: AppColors.textSecondary)),
                     const SizedBox(height: 24),
@@ -139,6 +212,48 @@ class _ExercisePageState extends State<ExercisePage> {
                           ),
                         );
                       }),
+
+const SizedBox(height: 24),
+const Text('Log Weight',
+    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+const SizedBox(height: 12),
+Container(
+  padding: const EdgeInsets.all(16),
+  decoration: BoxDecoration(
+    color: AppColors.surface,
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: AppColors.border),
+  ),
+  child: Row(
+    children: [
+      Expanded(
+        child: TextField(
+          controller: _weightCtrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+              hintText: 'Weight in kg', labelText: 'Today\'s Weight'),
+        ),
+      ),
+      const SizedBox(width: 12),
+      ElevatedButton(
+        onPressed: () async {
+          final w = double.tryParse(_weightCtrl.text);
+          if (w == null) return;
+          try {
+            await sl<Dio>().post(ApiConstants.weight, data: {'weight_kg': w});
+            _weightCtrl.clear();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Weight logged')));
+            }
+          } catch (_) {}
+        },
+        child: const Text('Log'),
+      ),
+    ],
+  ),
+),
+                  
                   ],
                 ),
               ),
@@ -154,10 +269,7 @@ class _ExercisePageState extends State<ExercisePage> {
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$name session logged'),
-          ),
-        );
+          SnackBar(content: Text('$name session logged')));
       }
     } catch (_) {}
   }
@@ -256,6 +368,9 @@ class _GymSessionPageState extends State<GymSessionPage> {
       _exercises = await widget.ds.searchExercises();
       if (_exercises.isNotEmpty) {
         _selectedExercise = _exercises.first as Map<String, dynamic>;
+      }
+      if (_exercises.isNotEmpty && _selectedExercise == null) {
+        setState(() => _selectedExercise = _exercises.first as Map<String, dynamic>);
       }
     } catch (_) {}
     setState(() => _starting = false);
@@ -443,11 +558,66 @@ class _GymSessionPageState extends State<GymSessionPage> {
                           ],
                         ),
                       );
+                      
                     }),
+
+                    const SizedBox(height: 24),
+                    const Text('Steps This Week',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: _stepsHistory.isEmpty
+                          ? const Text('No step data yet',
+                              style: TextStyle(color: AppColors.textMuted))
+                          : Column(
+                              children: _stepsHistory.map((s) {
+                                final entry = s as Map<String, dynamic>;
+                                final steps = (entry['steps'] as num).toInt();
+                                final date = entry['date'] as String;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(date.substring(5),
+                                          style: const TextStyle(
+                                              color: AppColors.textSecondary)),
+                                      Row(children: [
+                                        Text('$steps steps',
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold)),
+                                        const SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 100,
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: LinearProgressIndicator(
+                                              value: (steps / 10000).clamp(0.0, 1.0),
+                                              backgroundColor: AppColors.border,
+                                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                                  AppColors.primary),
+                                              minHeight: 6,
+                                            ),
+                                          ),
+                                        ),
+                                      ]),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                    ),
                   ],
                 ],
               ),
             ),
+        
     );
   }
 }

@@ -6,10 +6,10 @@ import 'core/router/app_router.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'shared/theme/app_theme.dart';
-
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   setupDependencies();
+  await initBackgroundService();
   runApp(const TrackMateApp());
 }
 
