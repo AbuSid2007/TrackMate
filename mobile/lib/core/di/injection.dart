@@ -1,30 +1,69 @@
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 import '../network/dio_client.dart';
+import '../storage/token_storage.dart';
 import '../../features/auth/data/datasources/auth_remote_datasource.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
+import '../../features/dashboard/data/dashboard_remote_datasource.dart';
+import '../../features/dashboard/presentation/bloc/dashboard_bloc.dart';
+import '../../features/nutrition/data/nutrition_remote_datasource.dart';
+import '../../features/analytics/data/analytics_remote_datasource.dart';
+import '../../features/workout/data/workout_remote_datasource.dart';
+import '../../features/admin/data/admin_remote_datasource.dart';
+import '../../features/trainer/data/trainer_remote_datasource.dart';
+import '../../features/social/data/social_remote_datasource.dart';
+import '../../features/notifications/data/notifications_remote_datasource.dart';
 
 final sl = GetIt.instance;
 
 void setupDependencies() {
-  sl.registerLazySingleton<Dio>(
-    () => DioClient.create(),
-  );
+  sl.registerLazySingleton<TokenStorage>(() => TokenStorage());
+
+  sl.registerLazySingleton<Dio>(() => DioClient.create(sl<TokenStorage>()));
 
   sl.registerLazySingleton<AuthRemoteDataSource>(
     () => AuthRemoteDataSourceImpl(sl<Dio>()),
   );
-
   sl.registerLazySingleton<AuthRepository>(
     () => AuthRepositoryImpl(
       remoteDataSource: sl<AuthRemoteDataSource>(),
+      tokenStorage: sl<TokenStorage>(),
     ),
   );
+  sl.registerLazySingleton<AuthBloc>(
+    () => AuthBloc(repository: sl<AuthRepository>()),
+  );
 
-// Change registerFactory to registerLazySingleton:
-sl.registerLazySingleton<AuthBloc>(
-  () => AuthBloc(repository: sl<AuthRepository>()),
+  sl.registerLazySingleton<DashboardRemoteDataSource>(
+    () => DashboardRemoteDataSource(sl<Dio>()),
+  );
+  sl.registerFactory<DashboardBloc>(
+    () => DashboardBloc(
+      dataSource: sl<DashboardRemoteDataSource>(),
+      dio: sl<Dio>(),
+    ),
+  );
+  sl.registerLazySingleton<NutritionRemoteDataSource>(
+    () => NutritionRemoteDataSource(sl<Dio>()),
+  );
+  sl.registerLazySingleton<AnalyticsRemoteDataSource>(
+    () => AnalyticsRemoteDataSource(sl<Dio>()),
+  );
+  sl.registerLazySingleton<WorkoutRemoteDataSource>(
+    () => WorkoutRemoteDataSource(sl<Dio>()),
+  );
+  sl.registerLazySingleton<AdminRemoteDataSource>(
+    () => AdminRemoteDataSource(sl<Dio>()),
+  );
+  sl.registerLazySingleton<TrainerRemoteDataSource>(
+    () => TrainerRemoteDataSource(sl<Dio>()),
+);
+sl.registerLazySingleton<SocialRemoteDataSource>(
+  () => SocialRemoteDataSource(sl<Dio>()),
+);
+sl.registerLazySingleton<NotificationsRemoteDataSource>(
+  () => NotificationsRemoteDataSource(sl<Dio>()),
 );
 }

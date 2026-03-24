@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/errors/failures.dart';
+import '../../../../core/storage/token_storage.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
@@ -7,9 +8,11 @@ import '../models/auth_models.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
+  final TokenStorage tokenStorage;
 
   AuthRepositoryImpl({
     required this.remoteDataSource,
+    required this.tokenStorage,
   });
 
   @override
@@ -37,13 +40,27 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, UserEntity>> login({
     required String email,
-    required String password
+    required String password,
   }) async {
     try {
-      final result = await remoteDataSource.login(
-        email: email,
-        password: password
-      );
+      final auth = await remoteDataSource.login(email: email, password: password);
+      await tokenStorage.save(auth.tokens);
+      return Right(_mapUser(auth.user));
+    } on Failure catch (f) {
+      return Left(f);
+    } catch (_) {
+      return const Left(UnknownFailure());
+    }
+  }
+
+  @override
+  Future<Either<Failure, UserEntity>> verifyEmail({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      final result = await remoteDataSource.verifyEmail(email: email, otp: otp);
+      await tokenStorage.save(result.tokens);
       return Right(_mapUser(result.user));
     } on Failure catch (f) {
       return Left(f);
@@ -53,24 +70,23 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-    Future<Either<Failure, void>> resendVerification({required String email}) async {
-      try {
-        await remoteDataSource.resendVerification(email: email);
-        return const Right(null);
-      } on Failure catch (f) {
-        return Left(f);
-      } catch (_) {
-        return const Left(UnknownFailure());
-      }
+  Future<Either<Failure, void>> resendVerification({required String email}) async {
+    try {
+      await remoteDataSource.resendVerification(email: email);
+      return const Right(null);
+    } on Failure catch (f) {
+      return Left(f);
+    } catch (_) {
+      return const Left(UnknownFailure());
     }
+  }
 
   @override
   Future<Either<Failure, void>> logout() async {
     try {
       await remoteDataSource.logout();
-    } catch (_) {
-      // Best-effort: ignore failures when logging out.
-    }
+    } catch (_) {}
+    await tokenStorage.clear();
     return const Right(null);
   }
 
@@ -87,7 +103,7 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<bool> hasStoredSession()  async => false;
+  Future<bool> hasStoredSession() async => false;
 
   UserEntity _mapUser(UserModel model) => UserEntity(
         id: model.id,
@@ -97,25 +113,4 @@ class AuthRepositoryImpl implements AuthRepository {
         isActive: model.isActive,
         isVerified: model.isVerified,
       );
-  
-  
-  @override
-  Future<Either<Failure, UserEntity>> verifyEmail({
-    required String email,
-    required String otp,
-  }) async {
-    try {
-      final result = await remoteDataSource.verifyEmail(
-        email: email,
-        otp: otp,
-      );
-      return Right(_mapUser(result.user));
-    } on Failure catch (f) {
-      return Left(f);
-    } catch (_) {
-      return const Left(UnknownFailure());
-    }
-  }
-
 }
-

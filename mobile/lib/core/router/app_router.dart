@@ -6,7 +6,20 @@ import '../../features/auth/presentation/bloc/auth_state.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/pages/check_email_page.dart';
-import '../../features/auth/presentation/pages/dashboard_placeholder_page.dart';
+import '../../features/auth/domain/entities/user_entity.dart';
+import '../../shared/pages/dashboard_page.dart';
+import '../../shared/pages/settings_page.dart';
+import '../../features/nutrition/presentation/pages/food_logging_page.dart';
+import '../../features/analytics/presentation/pages/analytics_page.dart';
+import '../../features/workout/presentation/pages/exercise_page.dart';
+import '../../features/trainer/presentation/pages/trainer_students_page.dart';
+import '../../features/trainer/presentation/pages/trainer_requests_page.dart';
+import '../../features/trainer/presentation/pages/find_trainer_page.dart';
+import '../../features/admin/presentation/pages/admin_dashboard_page.dart';
+import '../../features/admin/presentation/pages/admin_trainers_page.dart';
+import '../../features/admin/presentation/pages/admin_reports_page.dart';
+import '../../features/social/presentation/pages/social_page.dart';
+import '../../features/notifications/presentation/pages/notifications_page.dart';
 
 class AppRouter {
   static const String splash = '/';
@@ -14,6 +27,18 @@ class AppRouter {
   static const String register = '/register';
   static const String checkEmail = '/check-email';
   static const String dashboard = '/dashboard';
+  static const String settings = '/settings';
+  static const String trainerStudents = '/trainer/students';
+  static const String adminDashboard = '/admin/dashboard';
+  static const String food = '/food';
+  static const String exercise = '/exercise';
+  static const String analytics = '/analytics';
+  static const String trainerRequests = '/trainer/requests';  
+  static const String findTrainer = '/find-trainer';
+  static const String adminTrainers = '/admin/trainers';
+  static const String adminReports = '/admin/reports';
+  static const String notifications = '/notifications';
+  static const String social = '/social';
 
   static GoRouter create(AuthBloc authBloc) {
     return GoRouter(
@@ -29,58 +54,32 @@ class AppRouter {
         if (authState is AuthLoadingState || authState is AuthInitialState) {
           return null;
         }
-
-        
         if (authState is AuthRegisteredState) {
-          if (isCheckEmailRoute) return null;
-          return '$checkEmail?email=${Uri.encodeComponent(authState.email)}';
+          return isCheckEmailRoute
+              ? null
+              : '$checkEmail?email=${Uri.encodeComponent(authState.email)}';
         }
-
         if (authState is AuthUnverifiedState) {
-          if (isCheckEmailRoute) return null;
-          return '$checkEmail?email=${Uri.encodeComponent(authState.email)}';
+          return isCheckEmailRoute
+              ? null
+              : '$checkEmail?email=${Uri.encodeComponent(authState.email)}';
         }
-
-        if (authState is AuthVerificationSentState) {
-          return isCheckEmailRoute ? null : checkEmail;
-        }
-
         if (authState is AuthAuthenticatedState) {
-          if (isAuthRoute || isCheckEmailRoute) return dashboard;
+          if (isAuthRoute || isCheckEmailRoute || loc == splash) {
+            return _homeForRole(authState.user.role);
+          }
           return null;
         }
-
         if (authState is AuthUnauthenticatedState ||
             authState is AuthErrorState) {
           return isAuthRoute ? null : login;
         }
-        
         return null;
       },
       routes: [
-        GoRoute(path: splash, builder: (_, __) => const _SplashPage()),
         GoRoute(
-          path: login,
-          builder: (context, _) => LoginPage(
-            onNavigateToRegister: () => context.go(register),
-          ),
-        ),
-        GoRoute(
-          path: register,
-          builder: (context, _) => RegisterPage(
-            onNavigateToLogin: () => context.go(login),
-          ),
-        ),
-        // Change checkEmail route:
-        GoRoute(
-          path: checkEmail,
-          builder: (context, state) => CheckEmailPage(
-            email: state.uri.queryParameters['email'] ?? '',
-          ),
-        ),
-        GoRoute(
-          path: dashboard,
-          builder: (_, __) => const DashboardPlaceholderPage(),
+          path: splash,
+          builder: (_, __) => const _SplashPage(),
         ),
         GoRoute(
           path: login,
@@ -89,8 +88,58 @@ class AppRouter {
             verified: state.uri.queryParameters['verified'] == 'true',
           ),
         ),
+        GoRoute(
+          path: register,
+          builder: (context, _) => RegisterPage(
+            onNavigateToLogin: () => context.go(login),
+          ),
+        ),
+        GoRoute(
+          path: checkEmail,
+          builder: (context, state) => CheckEmailPage(
+            email: state.uri.queryParameters['email'] ?? '',
+          ),
+        ),
+        GoRoute(
+          path: dashboard,
+          builder: (_, __) => const DashboardPage(),
+        ),
+        GoRoute(
+          path: settings,
+          builder: (_, __) => const SettingsPage(),
+        ),
+        GoRoute(
+          path: trainerStudents,
+          builder: (_, __) => const DashboardPage(),
+        ),
+        GoRoute(
+          path: adminDashboard,
+          builder: (_, __) => const DashboardPage(),
+        ),
+        GoRoute(path: food, builder: (_, __) => const FoodLoggingPage()),
+        GoRoute(path: exercise, builder: (_, __) => const ExercisePage()),
+        GoRoute(path: analytics, builder: (_, __) => const AnalyticsPage()),
+        GoRoute(path: trainerStudents, builder: (_, __) => const TrainerStudentsPage()),
+        GoRoute(path: trainerRequests, builder: (_, __) => const TrainerRequestsPage()),
+        GoRoute(path: findTrainer, builder: (_, __) => const FindTrainerPage()),
+        GoRoute(path: adminDashboard, builder: (_, __) => const AdminDashboardPage()),
+        GoRoute(path: adminTrainers, builder: (_, __) => const AdminTrainersPage()),
+        GoRoute(path: adminReports, builder: (_, __) => const AdminReportsPage()),
+        GoRoute(path: social, builder: (_, __) => const SocialPage()),
+        GoRoute(path: notifications, builder: (_, __) => const NotificationsPage()),
       ],
     );
+  }
+
+  static String _homeForRole(UserRole role) {
+    switch (role) {
+      case UserRole.admin:
+        return adminDashboard;
+      case UserRole.trainer:
+        return trainerStudents;
+      case UserRole.trainee:
+        return dashboard;
+    }
   }
 }
 

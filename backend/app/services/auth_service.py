@@ -1,6 +1,6 @@
 import secrets
 from app.core.security import hash_password
-from app.models import user
+from app.models.user import User, UserRole, TrainerStatus
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token
 from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UserResponse, AuthResponse, MessageResponse
@@ -11,13 +11,6 @@ from jose import JWTError
 import asyncio
 import random
 from datetime import timedelta, timezone, datetime
-
-from app.models.user import User, UserRole, TrainerStatus
-from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UserResponse, AuthResponse
-from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UserResponse, AuthResponse, MessageResponse
-from app.core.exceptions import AuthenticationError, ConflictError, ForbiddenError, NotFoundError
-from app.services.email_service import email_service
-
 
 class AuthService:
 

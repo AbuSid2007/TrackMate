@@ -60,17 +60,17 @@ async def login(
     return auth
 
 
-@router.post("/refresh", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+@router.post("/refresh")
 async def refresh_token(
     response: Response,
-    refresh_token: str | None = Cookie(default=None),
+    body: dict = Body(default={}),
+    refresh_token_cookie: str | None = Cookie(default=None, alias="refresh_token"),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    if not refresh_token:
+    token = body.get("refresh_token") or refresh_token_cookie
+    if not token:
         raise AuthenticationError("Refresh token required")
-    tokens = await auth_service.refresh(db, refresh_token)
-    _set_auth_cookies(response, tokens)
-    return tokens
+    return await auth_service.refresh(db, token)
 
 
 @router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)

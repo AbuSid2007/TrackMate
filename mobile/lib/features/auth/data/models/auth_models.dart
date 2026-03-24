@@ -45,12 +45,14 @@ class UserModel {
 
 class AuthResponseModel {
   final UserModel user;
+  final TokenModel tokens;
 
-  const AuthResponseModel({required this.user});
+  const AuthResponseModel({required this.user, required this.tokens});
 
   factory AuthResponseModel.fromJson(Map<String, dynamic> json) =>
       AuthResponseModel(
         user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
+        tokens: TokenModel.fromJson(json['tokens'] as Map<String, dynamic>),
       );
 }
 

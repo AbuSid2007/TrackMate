@@ -1,0 +1,469 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/di/injection.dart';
+import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
+import '../../../../features/auth/presentation/bloc/auth_state.dart';
+import '../../../../shared/widgets/main_layout.dart';
+import '../../../../shared/theme/app_theme.dart';
+import '../../data/nutrition_remote_datasource.dart';
+
+class FoodLoggingPage extends StatefulWidget {
+  const FoodLoggingPage({super.key});
+
+  @override
+  State<FoodLoggingPage> createState() => _FoodLoggingPageState();
+}
+
+class _FoodLoggingPageState extends State<FoodLoggingPage> {
+  final _ds = NutritionRemoteDataSource(sl());
+  final _searchCtrl = TextEditingController();
+
+  List<dynamic> _searchResults = [];
+  List<dynamic> _loggedMeals = [];
+  Map<String, dynamic> _summary = {};
+  Map<String, dynamic>? _selectedFood;
+  int _servings = 1;
+  bool _searching = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final results = await Future.wait([
+        _ds.getNutritionSummary(),
+        _ds.getMeals(),
+      ]);
+      setState(() {
+        _summary = results[0] as Map<String, dynamic>;
+        _loggedMeals = results[1] as List<dynamic>;
+      });
+    } catch (_) {}
+    setState(() => _loading = false);
+  }
+
+  Future<void> _search(String q) async {
+    if (q.length < 2) {
+      setState(() => _searchResults = []);
+      return;
+    }
+    setState(() => _searching = true);
+    try {
+      final results = await _ds.searchFoods(q);
+      setState(() => _searchResults = results);
+    } catch (_) {}
+    setState(() => _searching = false);
+  }
+
+  Future<void> _logFood() async {
+    if (_selectedFood == null) return;
+    final f = _selectedFood!;
+    try {
+      await _ds.logMeal({
+        'food_id': f['id'] ?? '',
+        'food_name': f['name'],
+        'calories_per_100g': f['calories_per_100g'] ?? 0,
+        'protein_per_100g': f['protein_per_100g'] ?? 0,
+        'carbs_per_100g': f['carbs_per_100g'] ?? 0,
+        'fat_per_100g': f['fat_per_100g'] ?? 0,
+        'serving_size_g': f['serving_size_g'] ?? 100,
+        'serving_label': f['serving_label'] ?? '100g',
+        'servings': _servings.toDouble(),
+      });
+      setState(() {
+        _selectedFood = null;
+        _servings = 1;
+        _searchCtrl.clear();
+        _searchResults = [];
+      });
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Food logged successfully')),
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _deleteLog(String id) async {
+    try {
+      await _ds.deleteMeal(id);
+      await _load();
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = context.read<AuthBloc>().state;
+    final user = authState is AuthAuthenticatedState ? authState.user : null;
+    if (user == null) return const SizedBox.shrink();
+
+    return MainLayout(
+      user: user,
+      title: 'Food Logging',
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _MacrosCard(summary: _summary),
+                    const SizedBox(height: 16),
+                    _SearchBar(
+                      controller: _searchCtrl,
+                      onChanged: _search,
+                      searching: _searching,
+                    ),
+                    const SizedBox(height: 12),
+                    if (_searchResults.isNotEmpty)
+                      _SearchResults(
+                        results: _searchResults,
+                        onSelect: (food) => setState(() {
+                          _selectedFood = food;
+                          _servings = 1;
+                        }),
+                      ),
+                    if (_selectedFood != null) ...[
+                      const SizedBox(height: 12),
+                      _AddFoodCard(
+                        food: _selectedFood!,
+                        servings: _servings,
+                        onServingsChanged: (v) => setState(() => _servings = v),
+                        onLog: _logFood,
+                        onCancel: () => setState(() => _selectedFood = null),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    _LoggedFoodsCard(
+                      meals: _loggedMeals,
+                      onDelete: _deleteLog,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _MacrosCard extends StatelessWidget {
+  final Map<String, dynamic> summary;
+  const _MacrosCard({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    final protein = (summary['total_protein_g'] ?? 0.0) as num;
+    final carbs = (summary['total_carbs_g'] ?? 0.0) as num;
+    final fat = (summary['total_fat_g'] ?? 0.0) as num;
+    final calories = (summary['total_calories'] ?? 0.0) as num;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Today's Macros",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text('${calories.toStringAsFixed(0)} kcal',
+                  style: const TextStyle(
+                      color: AppColors.primary, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _MacroBar('Protein', protein.toDouble(), 150, AppColors.primary),
+          const SizedBox(height: 12),
+          _MacroBar('Carbs', carbs.toDouble(), 200, AppColors.success),
+          const SizedBox(height: 12),
+          _MacroBar('Fats', fat.toDouble(), 65, Colors.orange),
+        ],
+      ),
+    );
+  }
+
+  Widget _MacroBar(String label, double current, double goal, Color color) {
+    final progress = (current / goal).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12)),
+            Text('${current.toStringAsFixed(1)}g / ${goal.toInt()}g',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progress,
+            backgroundColor: AppColors.border,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 12,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final bool searching;
+
+  const _SearchBar({
+    required this.controller,
+    required this.onChanged,
+    required this.searching,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: 'Search for foods...',
+        prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+        suffixIcon: searching
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+}
+
+class _SearchResults extends StatelessWidget {
+  final List<dynamic> results;
+  final ValueChanged<Map<String, dynamic>> onSelect;
+
+  const _SearchResults({required this.results, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text('Search Results',
+                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+          ),
+          ...results.take(8).map((f) {
+            final food = f as Map<String, dynamic>;
+            return ListTile(
+              title: Text(food['name'] ?? ''),
+              subtitle: Text(
+                '${(food['calories_per_100g'] ?? 0).toStringAsFixed(0)} kcal · ${food['serving_label'] ?? '100g'}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: const Icon(Icons.add_circle_outline, color: AppColors.primary),
+              onTap: () => onSelect(food),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddFoodCard extends StatelessWidget {
+  final Map<String, dynamic> food;
+  final int servings;
+  final ValueChanged<int> onServingsChanged;
+  final VoidCallback onLog;
+  final VoidCallback onCancel;
+
+  const _AddFoodCard({
+    required this.food,
+    required this.servings,
+    required this.onServingsChanged,
+    required this.onLog,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Add to Log',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
+          Text(food['name'] ?? '',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            '${(food['calories_per_100g'] ?? 0).toStringAsFixed(0)} kcal · P: ${(food['protein_per_100g'] ?? 0).toStringAsFixed(1)}g · C: ${(food['carbs_per_100g'] ?? 0).toStringAsFixed(1)}g · F: ${(food['fat_per_100g'] ?? 0).toStringAsFixed(1)}g',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Servings'),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove),
+                      onPressed: servings > 1
+                          ? () => onServingsChanged(servings - 1)
+                          : null,
+                    ),
+                    Text('$servings',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () => onServingsChanged(servings + 1),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onCancel,
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onLog,
+                  child: const Text('Log Food'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoggedFoodsCard extends StatelessWidget {
+  final List<dynamic> meals;
+  final ValueChanged<String> onDelete;
+
+  const _LoggedFoodsCard({required this.meals, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Foods Eaten Today',
+              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+          const SizedBox(height: 12),
+          if (meals.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('No food logged yet', style: TextStyle(color: AppColors.textMuted)),
+              ),
+            )
+          else
+            ...meals.map((m) {
+              final meal = m as Map<String, dynamic>;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(meal['food_name'] ?? '',
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(
+                              '${(meal['calories'] ?? 0).toStringAsFixed(0)} kcal · ${meal['servings']}x ${meal['serving_label']}',
+                              style: const TextStyle(
+                                  color: AppColors.textSecondary, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline,
+                            color: AppColors.error, size: 20),
+                        onPressed: () => onDelete(meal['id']),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}

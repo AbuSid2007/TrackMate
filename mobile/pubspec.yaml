@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_secure_storage: ^9.2.2
 
   # State management
   flutter_bloc: ^9.1.1
@@ -17,7 +18,7 @@ dependencies:
   # Networking
   dio: ^5.4.3+1
   dio_cookie_manager: ^3.0.0
-  cookie_jar: ^4.0.0        # <-- CHANGED THIS LINE FROM ^3.0.1 to ^4.0.0
+  cookie_jar: ^4.0.0
 
   # Navigation
   go_router: ^17.1.0
@@ -28,17 +29,28 @@ dependencies:
   # Functional programming
   dartz: ^0.10.1
 
+  # Charts
+  fl_chart: ^1.2.0
+
+  # WebSocket
+  web_socket_channel: ^3.0.1
+
+  # Local storage (settings only)
+  shared_preferences: ^2.5.4
+
   # Utils
   logger: ^2.3.0
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   bloc_test: ^10.0.0
   mocktail: ^1.0.4
-flutter_lints: ^4.0.0
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
+  
   assets:
     - assets/images/

@@ -1,0 +1,219 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/di/injection.dart';
+import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
+import '../../../../features/auth/presentation/bloc/auth_state.dart';
+import '../../../../shared/widgets/main_layout.dart';
+import '../../../../shared/theme/app_theme.dart';
+import '../../data/notifications_remote_datasource.dart';
+
+class NotificationsPage extends StatefulWidget {
+  const NotificationsPage({super.key});
+
+  @override
+  State<NotificationsPage> createState() => _NotificationsPageState();
+}
+
+class _NotificationsPageState extends State<NotificationsPage> {
+  final _ds = NotificationsRemoteDataSource(sl());
+  List<dynamic> _notifications = [];
+  int _unreadCount = 0;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final data = await _ds.getNotifications();
+      setState(() {
+        _notifications =
+            (data['notifications'] as List?) ?? [];
+        _unreadCount = (data['unread_count'] as num?)?.toInt() ?? 0;
+      });
+    } catch (_) {}
+    setState(() => _loading = false);
+  }
+
+  IconData _iconFor(String type) {
+    switch (type) {
+      case 'friend_request':
+      case 'friend_accepted':
+        return Icons.people;
+      case 'trainer_request':
+      case 'trainer_accepted':
+      case 'trainer_rejected':
+      case 'trainer_approved':
+        return Icons.fitness_center;
+      case 'new_message':
+        return Icons.message;
+      case 'post_like':
+        return Icons.favorite;
+      default:
+        return Icons.notifications;
+    }
+  }
+
+  Color _colorFor(String type) {
+    switch (type) {
+      case 'friend_request':
+      case 'friend_accepted':
+        return AppColors.primary;
+      case 'trainer_approved':
+      case 'trainer_accepted':
+        return AppColors.success;
+      case 'trainer_rejected':
+        return AppColors.error;
+      case 'post_like':
+        return Colors.pink;
+      default:
+        return AppColors.textSecondary;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user =
+        (context.read<AuthBloc>().state as AuthAuthenticatedState).user;
+
+    return MainLayout(
+      user: user,
+      title: 'Notifications',
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: Column(
+                children: [
+                  if (_unreadCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Text('$_unreadCount unread',
+                              style: const TextStyle(
+                                  color: AppColors.textSecondary)),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () async {
+                              await _ds.markAllRead();
+                              await _load();
+                            },
+                            child: const Text('Mark all read'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Expanded(
+                    child: _notifications.isEmpty
+                        ? const Center(
+                            child: Text('No notifications',
+                                style: TextStyle(
+                                    color: AppColors.textMuted)))
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16),
+                            itemCount: _notifications.length,
+                            itemBuilder: (_, i) {
+                              final n = _notifications[i]
+                                  as Map<String, dynamic>;
+                              final isRead = n['is_read'] == true;
+                              final type = n['type'] as String? ?? '';
+
+                              return Dismissible(
+                                key: Key(n['id']),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 16),
+                                  color: AppColors.error,
+                                  child: const Icon(Icons.delete,
+                                      color: Colors.white),
+                                ),
+                                onDismissed: (_) async {
+                                  await _ds.delete(n['id']);
+                                  setState(() =>
+                                      _notifications.removeAt(i));
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: isRead
+                                        ? AppColors.surface
+                                        : AppColors.primary.withOpacity(0.04),
+                                    borderRadius:
+                                        BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isRead
+                                          ? AppColors.border
+                                          : AppColors.primary
+                                              .withOpacity(0.2),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: _colorFor(type)
+                                              .withOpacity(0.1),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          _iconFor(type),
+                                          color: _colorFor(type),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(n['title'] ?? '',
+                                                style: TextStyle(
+                                                    fontWeight: isRead
+                                                        ? FontWeight.normal
+                                                        : FontWeight.bold)),
+                                            const SizedBox(height: 2),
+                                            Text(n['body'] ?? '',
+                                                style: const TextStyle(
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                    fontSize: 13)),
+                                          ],
+                                        ),
+                                      ),
+                                      if (!isRead)
+                                        IconButton(
+                                          icon: const Icon(
+                                              Icons.check_circle_outline,
+                                              size: 18,
+                                              color: AppColors.primary),
+                                          onPressed: () async {
+                                            await _ds.markRead(n['id']);
+                                            await _load();
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
