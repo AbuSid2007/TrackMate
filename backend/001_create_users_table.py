@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("DO $$ BEGIN CREATE TYPE userrole AS ENUM ('trainee', 'trainer', 'admin'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
+    op.execute("DROP TYPE IF EXISTS userrole CASCADE")
 
     op.create_table(
         "users",
