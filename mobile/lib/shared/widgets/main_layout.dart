@@ -111,6 +111,7 @@ class _AppDrawer extends StatelessWidget {
             _tile(context, Icons.people, 'My Students', '/trainer/students'),
             _tile(context, Icons.calendar_today, 'Calendar', '/trainer/calendar'),
             _tile(context, Icons.inbox, 'Requests', '/trainer/requests'),
+            _tile(context, Icons.people, 'Social', '/social'),
             _tile(context, Icons.message, 'Messages', '/messages'),
             _tile(context, Icons.notifications, 'Notifications', AppRouter.notifications),
           ],
@@ -118,7 +119,6 @@ class _AppDrawer extends StatelessWidget {
           if (isAdmin) ...[
             _tile(context, Icons.dashboard, 'Dashboard', '/admin/dashboard'),
             _tile(context, Icons.manage_accounts, 'Manage Trainers', '/admin/trainers'),
-            _tile(context, Icons.warning_amber_rounded, 'Reports', '/admin/reports'),
             _tile(context, Icons.people, 'Users', '/admin/users'),
           ],
 

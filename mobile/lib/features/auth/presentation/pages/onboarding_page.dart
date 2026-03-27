@@ -5,7 +5,7 @@ import '../../../../core/constants/api_constants.dart';
 
 class OnboardingPage extends StatefulWidget {
   final VoidCallback onComplete;
-  
+
   const OnboardingPage({super.key, required this.onComplete});
 
   @override
@@ -54,38 +54,80 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.dispose();
   }
 
-  Future<void> _submitData() async {
-    final height = double.tryParse(_heightCtrl.text) ?? 0;
-    final weight = double.tryParse(_weightCtrl.text) ?? 0;
-    
-    if (height < 50 || height > 300 || weight < 20 || weight > 500) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter realistic height and weight values.'))
-      );
+  void _handleNext() {
+    // 🔥 FRONTEND VALIDATION - Page 1 (Biometrics)
+    if (_currentPage == 1) {
+      final height = double.tryParse(_heightCtrl.text) ?? 0;
+      final weight = double.tryParse(_weightCtrl.text) ?? 0;
+
+      if (height < 50 || height > 300) {
+        _showError('Height must be between 50 and 300 cm');
+        return;
+      }
+      if (weight < 20 || weight > 500) {
+        _showError('Weight must be between 20 and 500 kg');
+        return;
+      }
+    }
+
+    // 🔥 FRONTEND VALIDATION - Page 2 (Goals)
+    if (_currentPage == 2) {
+      final steps = int.tryParse(_stepGoalCtrl.text) ?? 0;
+      final cals = int.tryParse(_calorieGoalCtrl.text) ?? 0;
+
+      if (steps < 1000 || steps > 100000) {
+        _showError('Step goal must be between 1000 and 100,000');
+        return;
+      }
+      if (cals < 500 || cals > 10000) {
+        _showError('Calorie goal must be between 500 and 10,000');
+        return;
+      }
+
+      // If validation passes on the last page, submit!
+      _submitData();
       return;
     }
 
+    // Proceed to the next page if not on the last page
+    _pageCtrl.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        )
+    );
+  }
+
+  Future<void> _submitData() async {
     setState(() => _isSaving = true);
 
     try {
       // Sending data to your FastAPI backend
       await _dio.put(
-        ApiConstants.profile, 
-        data: {
-          'gender': _gender,
-          'date_of_birth': _dob?.toIso8601String(),
-          'height_cm': height,
-          'weight_kg': weight,
-          'daily_step_goal': int.tryParse(_stepGoalCtrl.text) ?? 10000,
-          'daily_calorie_goal': int.tryParse(_calorieGoalCtrl.text) ?? 2000,
-          'activity_level': _activityLevel,
-        }
+          ApiConstants.profile,
+          data: {
+            'gender': _gender,
+            'date_of_birth': _dob?.toIso8601String(),
+            'height_cm': double.tryParse(_heightCtrl.text),
+            'weight_kg': double.tryParse(_weightCtrl.text),
+            'daily_step_goal': int.tryParse(_stepGoalCtrl.text),
+            'daily_calorie_goal': int.tryParse(_calorieGoalCtrl.text),
+            'activity_level': _activityLevel,
+          }
       ).timeout(const Duration(seconds: 10)); // Prevents infinite hanging
 
-      // ✅ SUCCESS! Tell the AuthBloc we are done. 
+      // ✅ SUCCESS! Tell the AuthBloc we are done.
       // The router will catch this and instantly push you to the Dashboard.
       if (mounted) {
-        widget.onComplete(); 
+        widget.onComplete();
       }
 
     } on DioException catch (e) {
@@ -115,21 +157,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
   }
 
-  void _handleNext() {
-    if (_currentPage < 2) {
-      _pageCtrl.nextPage(
-        duration: const Duration(milliseconds: 300), 
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _submitData();
-    }
-  }
-
   void _handleBack() {
     if (_currentPage > 0) {
       _pageCtrl.previousPage(
-        duration: const Duration(milliseconds: 300), 
+        duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
     }
@@ -142,7 +173,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600), // Web-safe constraint to prevent crash
+            constraints: const BoxConstraints(maxWidth: 600), // Web-safe constraint
             child: Column(
               children: [
                 _buildProgressBar(),
@@ -203,12 +234,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
         children: [
           _currentPage > 0
               ? TextButton.icon(
-                  onPressed: _isSaving ? null : _handleBack,
-                  icon: const Icon(Icons.chevron_left, color: Colors.grey),
-                  label: const Text('Back', style: TextStyle(color: Colors.grey, fontSize: 16)),
-                )
-              : const SizedBox(width: 80), 
-          
+            onPressed: _isSaving ? null : _handleBack,
+            icon: const Icon(Icons.chevron_left, color: Colors.grey),
+            label: const Text('Back', style: TextStyle(color: Colors.grey, fontSize: 16)),
+          )
+              : const SizedBox(width: 80),
+
           SizedBox(
             width: 140, // Strict bounds so it doesn't infinite-width crash on web
             height: 48,
@@ -220,9 +251,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
               ),
               child: _isSaving
                   ? const SizedBox(
-                      height: 20, width: 20, 
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
-                    )
+                  height: 20, width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
+              )
                   : Text(_currentPage == 2 ? 'Complete' : 'Next >', style: const TextStyle(fontSize: 16, color: Colors.white)),
             ),
           ),

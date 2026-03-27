@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -7,6 +8,7 @@ import '../../../../core/router/app_router.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
+
 
 class CheckEmailPage extends StatefulWidget {
   final String email;
@@ -21,6 +23,40 @@ class _CheckEmailPageState extends State<CheckEmailPage> {
       List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   bool _sending = false;
+
+  Timer? _timer;
+  int _secondsRemaining = 30;
+  bool _canResend = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer(); // 🔥 Start the countdown automatically when page loads
+  }
+
+  void _startTimer() {
+    setState(() {
+      _secondsRemaining = 30;
+      _canResend = false;
+    });
+
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_secondsRemaining > 0) {
+            _secondsRemaining--;
+          } else {
+            _canResend = true;
+            _timer?.cancel();
+          }
+        });
+      }
+    });
+  }
+
+
+
 
   @override
   void dispose() {
@@ -54,6 +90,7 @@ class _CheckEmailPageState extends State<CheckEmailPage> {
     context.read<AuthBloc>().add(
           AuthResendVerificationEvent(email: widget.email),
         );
+    _startTimer();
   }
 
   @override
@@ -177,28 +214,28 @@ class _CheckEmailPageState extends State<CheckEmailPage> {
                         duration: const Duration(milliseconds: 200),
                         child: isLoading
                             ? Container(
-                                key: const ValueKey('loading'),
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(0.8),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              )
-                            : ElevatedButton(
-                                key: const ValueKey('button'),
-                                onPressed: _submit,
-                                child: const Text('Verify Email'),
+                          key: const ValueKey('loading'),
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
                               ),
+                            ),
+                          ),
+                        )
+                            : ElevatedButton(
+                          key: const ValueKey('button'),
+                          onPressed: _submit,
+                          child: const Text('Verify Email'),
+                        ),
                       );
                     },
                   ),
@@ -214,18 +251,29 @@ class _CheckEmailPageState extends State<CheckEmailPage> {
                         ),
                       ),
                       TextButton(
-                        onPressed: _sending ? null : _resend,
+                        // 🔥 Only active if NOT sending and timer is done
+                        onPressed: (_sending || !_canResend) ? null : _resend,
                         style: TextButton.styleFrom(
                           padding: EdgeInsets.zero,
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          foregroundColor: AppColors.primary,
+                          // 🔥 Gray out the text if it's disabled
+                          foregroundColor: _canResend
+                              ? AppColors.primary
+                              : AppColors.textMuted,
                         ),
-                        child: const Text(
-                          'Resend',
+                        child: Text(
+                          // 🔥 Show the countdown or the "Resend" text
+                          _canResend
+                              ? 'Resend'
+                              : 'Resend in ${_secondsRemaining}s',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
+                            // Added explicit color control here just in case foregroundColor misses
+                            color: _canResend
+                                ? AppColors.primary
+                                : AppColors.textMuted,
                           ),
                         ),
                       ),

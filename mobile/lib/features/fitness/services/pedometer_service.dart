@@ -1,61 +1,69 @@
-// import 'dart:async';
-// import 'dart:ui';
-// import 'package:flutter/foundation.dart';
-// // import 'package:flutter_background_service/flutter_background_service.dart';
-// import 'package:pedometer/pedometer.dart';
-// import 'package:permission_handler/permission_handler.dart';
-//
-// Future<void> initBackgroundService() async {
-//   if (kIsWeb) return;
-//   final service = FlutterBackgroundService();
-//   await service.configure(
-//     androidConfiguration: AndroidConfiguration(
-//       onStart: onStart,
-//       isForegroundMode: true,
-//       autoStart: true,
-//       autoStartOnBoot: true,
-//     ),
-//     iosConfiguration: IosConfiguration(
-//       autoStart: true,
-//       onForeground: onStart,
-//       onBackground: onIosBackground,
-//     ),
-//   );
-// }
-//
-// @pragma('vm:entry-point')
-// Future<bool> onIosBackground(ServiceInstance service) async => true;
-//
-// @pragma('vm:entry-point')
-// void onStart(ServiceInstance service) {
-//   DartPluginRegistrant.ensureInitialized();
-//   int sessionStart = 0;
-//   bool first = true;
-//
-//   Pedometer.stepCountStream.listen((event) {
-//     if (first) {
-//       sessionStart = event.steps;
-//       first = false;
-//     }
-//     service.invoke('steps', {'steps': event.steps - sessionStart});
-//   });
-// }
-//
-// class PedometerService {
-//   final _controller = StreamController<int>.broadcast();
-//   Stream<int> get steps => _controller.stream;
-//
-//   Future<void> start() async {
-//     if (kIsWeb) return;
-//     await Permission.activityRecognition.request();
-//     final service = FlutterBackgroundService();
-//     await service.startService();
-//     service.on('steps').listen((data) {
-//       if (data != null) {
-//         _controller.add((data['steps'] as num).toInt());
-//       }
-//     });
-//   }
-//
-//   void dispose() => _controller.close();
-// }
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:pedometer/pedometer.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:dio/dio.dart';
+import '../../../core/di/injection.dart';
+
+class PedometerService {
+  final _controller = StreamController<int>.broadcast();
+  StreamSubscription<StepCount>? _subscription;
+  Timer? _syncTimer;
+
+  int _initialHardwareSteps = -1;
+  int _stepsAlreadySavedOnBackend = 0;
+  int _currentLiveTotal = 0;
+
+  Stream<int> get steps => _controller.stream;
+
+  Future<void> start() async {
+    if (kIsWeb) return;
+
+    var status = await Permission.activityRecognition.request();
+
+    if (status.isGranted) {
+      // 1. Fetch what the backend already has saved for today
+      try {
+        final res = await sl<Dio>().get('/api/v1/fitness/steps/summary');
+        _stepsAlreadySavedOnBackend = (res.data['steps'] as num?)?.toInt() ?? 0;
+        _currentLiveTotal = _stepsAlreadySavedOnBackend;
+        _controller.add(_currentLiveTotal); // Immediately broadcast the saved steps
+      } catch (e) {
+        debugPrint("Failed to fetch initial steps: $e");
+      }
+
+      // 2. Start listening to hardware pedometer
+      _subscription = Pedometer.stepCountStream.listen(
+            (StepCount event) {
+          if (_initialHardwareSteps == -1) {
+            _initialHardwareSteps = event.steps; // Set baseline
+          }
+
+          // Calculate steps taken *during this active app session*
+          int sessionSteps = event.steps - _initialHardwareSteps;
+
+          // Add them to the backend total
+          _currentLiveTotal = _stepsAlreadySavedOnBackend + sessionSteps;
+          _controller.add(_currentLiveTotal);
+        },
+      );
+
+      // 3. SILENT SYNC: Send the grand total to backend every 30 seconds
+      _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+        if (_currentLiveTotal > _stepsAlreadySavedOnBackend) {
+          try {
+            await sl<Dio>().post('/api/v1/fitness/steps', data: {'steps': _currentLiveTotal});
+            debugPrint("Silently synced $_currentLiveTotal steps");
+          } catch (_) {}
+        }
+      });
+
+    }
+  }
+
+  void dispose() {
+    _subscription?.cancel();
+    _syncTimer?.cancel();
+    _controller.close();
+  }
+}

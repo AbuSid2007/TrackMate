@@ -564,7 +564,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
             const SizedBox(height: 20),
 
-            _header('Danger Zone'),
+            _header('Log Out'),
             Container(
               decoration: BoxDecoration(
                 color: AppColors.surface,
