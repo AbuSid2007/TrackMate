@@ -111,6 +111,7 @@ class _AppDrawer extends StatelessWidget {
             _tile(context, Icons.people, 'My Students', '/trainer/students'),
             _tile(context, Icons.calendar_today, 'Calendar', '/trainer/calendar'),
             _tile(context, Icons.inbox, 'Requests', '/trainer/requests'),
+            _tile(context, Icons.people, 'Social', '/social'),
             _tile(context, Icons.message, 'Messages', '/messages'),
             _tile(context, Icons.notifications, 'Notifications', AppRouter.notifications),
           ],

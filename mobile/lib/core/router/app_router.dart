@@ -26,6 +26,7 @@ import '../../features/notifications/presentation/pages/notifications_page.dart'
 import '../../features/messaging/presentation/pages/conversations_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
 import '../../features/auth/presentation/pages/onboarding_page.dart';
+import '../../features/trainer/presentation/pages/coaching_hub_page.dart';
 
 class AppRouter {
   static const String splash = '/';
@@ -49,7 +50,8 @@ class AppRouter {
   static const String messages = '/messages';
   static const String calendar = '/calendar';
   static const String onboarding = '/onboarding';
-  static const String trainerCalendar = '/trainer/calendar'; 
+  static const String trainerCalendar = '/trainer/calendar';
+  static const String coachingHub = '/coaching-hub'; // <-- ADD THIS LINE
 
   static GoRouter create(AuthBloc authBloc) {
     return GoRouter(
@@ -120,7 +122,16 @@ class AppRouter {
         GoRoute(path: trainerRequests, builder: (_, __) => const TrainerRequestsPage()),
         GoRoute(path: trainerCalendar, builder: (_, __) => const CalendarPage()), 
         GoRoute(path: findTrainer, builder: (_, __) => const FindTrainerPage()),
+        GoRoute(
+            path: coachingHub,
+            builder: (context, state) {
+              // 1. Grab the data passed during navigation (default to empty map if null)
+              final extraData = state.extra as Map<String, dynamic>? ?? {};
 
+              // 2. Pass it into your page (Notice we removed 'const' here!)
+              return CoachingHubPage(trainerInfo: extraData);
+            }
+        ),
         // Admin Routes
         GoRoute(path: adminDashboard, builder: (_, __) => const AdminDashboardPage()),
         GoRoute(path: adminTrainers, builder: (_, __) => const AdminTrainersPage()),
