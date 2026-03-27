@@ -557,23 +557,45 @@ class _GymSessionPageState extends State<GymSessionPage> {
   Future<void> _finish() async {
     if (_sessionId == null) return;
     setState(() => _finishing = true);
+
     try {
+      // 1. Get the exact final diff
       final diff = DateTime.now().difference(_sessionStartTime);
+
+      // 2. Format for UI / Notes
       final int mins = diff.inMinutes;
       final int secs = diff.inSeconds % 60;
       final String durationStr = "${mins}m ${secs}s";
 
-      final double totalMinutesFloat = diff.inSeconds / 60.0;
-      final double calories = (totalMinutesFloat / 30.0) * 3.0 * widget.userWeightKg;
+      // 3. High-Precision Math (Use total seconds divided by 60 for exact fractional minutes)
+      final double exactTotalMinutes = diff.inSeconds / 60.0;
+
+      // 🔥 THE MET FORMULA (Metabolic Equivalent of Task)
+      // Common MET Values:
+      // 3.0 = Light weightlifting / Yoga
+      // 5.0 = Moderate cardio / Fast walking
+      // 6.0 = Vigorous weightlifting / Standard gym session
+      // 8.0 = Intense circuit training / Running
+      const double exerciseMetValue = 6.0;
+
+      // Calories = (MET * 3.5 * Weight in kg / 200) * Duration in minutes
+      final double calories = (exerciseMetValue * 3.5 * widget.userWeightKg / 200) * exactTotalMinutes;
 
       await widget.ds.finishSession(
-        _sessionId!, 
-        caloriesBurned: calories,
-        notes: durationStr 
+          _sessionId!,
+          // If your backend accepts exact time numbers, you can now pass them like this:
+          // durationMinutes: exactTotalMinutes,
+          // durationSeconds: diff.inSeconds,
+          caloriesBurned: calories,
+          notes: durationStr
       );
+
       if (mounted) Navigator.pop(context);
-    } catch (_) {}
-    if (mounted) setState(() => _finishing = false);
+    } catch (_) {
+      // Optional: Add some error handling here so the user knows if the save failed
+    } finally {
+      if (mounted) setState(() => _finishing = false);
+    }
   }
 
   @override
