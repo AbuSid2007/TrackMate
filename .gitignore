@@ -11,3 +11,6 @@ build/
 venv
 __pycache__/.idea/
 pubspec.lock
+
+credentials.json
+token.json
