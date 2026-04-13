@@ -1,19 +1,10 @@
-from fastapi import Depends, Request
+from fastapi import Request, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import get_db
 from app.models.user import User, UserRole
 from app.services.auth_service import auth_service
 from app.core.exceptions import ForbiddenError, AuthenticationError
 
-
-from fastapi import Request, HTTPException, status, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-
-# Adjust these imports based on your exact file structure
-from app.core.database import get_db 
-from app.services.auth_service import auth_service
-from app.models.user import User
-from app.core.exceptions import AuthenticationError, ForbiddenError
 
 async def get_current_user(
     request: Request,
