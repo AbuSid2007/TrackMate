@@ -4,7 +4,6 @@ import '../../../../shared/theme/app_theme.dart';
 import '../../../../core/di/injection.dart';
 import '../../data/workout_remote_datasource.dart';
 
-// 🔥 Hardcoded CSV Data directly matching your parameters
 const List<Map<String, dynamic>> cardioExercises = [
   {"name": "Running", "multiplier": 4.8, "image": "assets/images/running.jpg"},
   {"name": "Burpee", "multiplier": 4.25, "image": "assets/images/burpee.jpg"},
@@ -56,11 +55,9 @@ class _CardioTimerPageState extends State<CardioTimerPage> {
       final seconds = _stopwatch.elapsed.inSeconds % 60;
       final totalMinutesFloat = _stopwatch.elapsed.inSeconds / 60.0;
       
-      // 🔥 Calculate Calories based on CSV multiplier and exact user weight
       final double multiplier = _selectedCardio['multiplier'];
-      final calories = (totalMinutesFloat / 30.0) * multiplier * widget.userWeightKg;
+      final calories = multiplier * widget.userWeightKg * totalMinutesFloat * 0.0175;
 
-      // 🔥 Store the exact stopwatch duration into the notes so history displays it
       final durationString = "${minutes}m ${seconds}s";
 
       await _ds.finishSession(

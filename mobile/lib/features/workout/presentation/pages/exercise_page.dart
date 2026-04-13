@@ -443,6 +443,8 @@ class _GymSessionPageState extends State<GymSessionPage> {
 
   bool _starting = false;
   bool _finishing = false;
+  
+  double _totalCaloriesBurned = 0.0;
 
   late DateTime _sessionStartTime;
 
@@ -474,13 +476,21 @@ class _GymSessionPageState extends State<GymSessionPage> {
     if (isTime && duration == null) return;
     if (!isTime && reps == null) return;
 
+    final double multiplier = (_selectedExercise!['multiplier'] as num?)?.toDouble() ?? 3.0;
+    final double activeMinutes = isTime ? (duration! / 60.0) : ((reps! * 4.0) / 60.0); 
+    
+    final double setCalories = multiplier * widget.userWeightKg * activeMinutes * 0.0175;
+    
+    _totalCaloriesBurned += setCalories;
+
     setState(() {
       _sets.add({
         'exercise': _selectedExercise!['name'],
         'reps': reps,
         'weight': weight,
         'duration_seconds': duration,
-        'isTime': isTime
+        'isTime': isTime,
+        'calories_added': setCalories,
       });
       _repsCtrl.clear();
       _weightCtrl.clear();
@@ -507,8 +517,7 @@ class _GymSessionPageState extends State<GymSessionPage> {
       final int secs = diff.inSeconds % 60;
       final String durationStr = "${mins}m ${secs}s";
 
-      final double totalMinutesFloat = diff.inSeconds / 60.0;
-      final double calories = (totalMinutesFloat / 30.0) * 3.0 * widget.userWeightKg;
+      final double calories = _totalCaloriesBurned;
 
       await widget.ds.finishSession(
           _sessionId!,
