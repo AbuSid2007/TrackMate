@@ -10,6 +10,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../core/di/injection.dart';
 import '../../core/constants/api_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -325,7 +326,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       TextFormField(
                         controller: expCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: false, signed: false),
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: const InputDecoration(labelText: 'Years of Experience'),
                         validator: (val) => int.tryParse(val?.trim() ?? '') == null ? 'Must be a valid number' : null,
                       ),
@@ -385,7 +387,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       TextFormField(
                         controller: rateCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: false), 
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                         decoration: const InputDecoration(labelText: 'Hourly Rate (₹)', prefixText: '₹ '),
                         validator: (val) => double.tryParse(val?.trim() ?? '') == null ? 'Must be a valid number' : null,
                       ),

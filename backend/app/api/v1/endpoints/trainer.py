@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 from app.db.base import get_db
@@ -15,11 +15,11 @@ router = APIRouter(prefix="/trainer", tags=["Trainer"])
 
 class TrainerApplicationRequest(BaseModel):
     phone_number: Optional[str] = None
-    experience_years: Optional[int] = None
+    experience_years: Optional[int] = Field(default=None, ge=0, description="Years of experience cannot be negative")
     about: Optional[str] = None
     specializations: Optional[str] = None
     certifications: Optional[str] = None
-    hourly_rate: Optional[float] = None
+    hourly_rate: Optional[float] = Field(default=None, ge=0.0, description="Hourly rate cannot be negative")
 
 
 class TrainerRequestBody(BaseModel):
