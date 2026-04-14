@@ -32,24 +32,39 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   Map<String, dynamic> _stats = {};
   bool _loading = true;
   final _noteCtrl = TextEditingController();
-void _showBookingDialog(BuildContext context) async {
+  void _showBookingDialog(BuildContext context) async {
+    final now = DateTime.now();
+
     final date = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 90)),
+      initialDate: now, // Default to today
+      firstDate: now,   // Prevent selecting days in the past
+      lastDate: now.add(const Duration(days: 90)),
     );
     if (date == null) return;
 
     if (!context.mounted) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: const TimeOfDay(hour: 10, minute: 0),
+      initialTime: TimeOfDay.fromDateTime(now),
     );
     if (time == null) return;
 
+    // Combine date and time
     final scheduled = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    
+
+    // 🔥 NEW VALIDATION: Ensure the specific time is not in the past
+    if (scheduled.isBefore(now)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot book a session in the past. Please select a future time.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     if (!context.mounted) return;
     try {
       await widget.ds.scheduleSession(widget.studentId, scheduled, 60, "Standard 1-on-1 check-in");
