@@ -403,18 +403,37 @@ class TrainerService:
             .options(selectinload(User.profile))
         )
         trainers = result.scalars().all()
-        return [
-            {
-                "id": str(t.id),
+
+        apps_result = await db.execute(
+            select(TrainerApplication).where(TrainerApplication.status == "approved")
+        )
+        apps = {str(app.user_id): app for app in apps_result.scalars().all()}
+
+        payload = []
+        for t in trainers:
+            t_id = str(t.id)
+            app = apps.get(t_id)
+            
+            spec = t.profile.specializations if t.profile and t.profile.specializations else (app.specializations if app else None)
+            exp = t.profile.experience_years if t.profile and t.profile.experience_years is not None else (app.experience_years if app else None)
+            rate = t.profile.hourly_rate if t.profile and t.profile.hourly_rate is not None else (app.hourly_rate if app else None)
+            bio = t.profile.bio if t.profile and t.profile.bio else (app.about if app else None)
+            phone = t.profile.phone_number if t.profile and t.profile.phone_number else (app.phone_number if app else None)
+            certs = app.certifications if app else None
+
+            payload.append({
+                "id": t_id,
                 "full_name": t.full_name,
                 "email": t.email,
+                "phone_number": phone,
                 "profile_image_url": t.profile.profile_image_url if t.profile else None,
-                "specializations": t.profile.specializations if t.profile else None,
-                "experience_years": t.profile.experience_years if t.profile else None,
-                "hourly_rate": t.profile.hourly_rate if t.profile else None,
-                "bio": t.profile.bio if t.profile else None,
-            }
-            for t in trainers
-        ]
+                "specializations": spec,
+                "experience_years": exp,
+                "hourly_rate": rate,
+                "bio": bio,
+                "certifications": certs,
+            })
+            
+        return payload
 
 trainer_service = TrainerService()

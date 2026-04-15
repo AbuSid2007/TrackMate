@@ -7,8 +7,6 @@ import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../../../../shared/widgets/main_layout.dart';
 import '../../../../shared/theme/app_theme.dart';
 import '../../data/trainer_remote_datasource.dart';
-
-// 🔥 UNCOMMENT AND FIX THESE IMPORTS FOR YOUR PROJECT STRUCTURE
 import '../../../messaging/data/messaging_remote_datasource.dart';
 import '../../../messaging/presentation/pages/chat_page.dart';
 import 'coaching_hub_page.dart';
@@ -53,12 +51,11 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
     if (mounted) setState(() => _loading = false);
   }
 
-  // 🔥 API Call to fire the current trainer
   Future<void> _quitTrainer() async {
     try {
       await sl<Dio>().post('/api/v1/trainer/quit');
       setState(() {
-        _currentTrainerId = null; // Unlocks the request buttons
+        _currentTrainerId = null; 
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -66,6 +63,20 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
         );
       }
     } catch (_) {}
+  }
+
+  String _formatExperience(dynamic exp) {
+    if (exp == null) return 'N/A';
+    int val = 0;
+    if (exp is int) {
+      val = exp;
+    } else if (exp is String) {
+      val = int.tryParse(exp) ?? 0;
+    } else if (exp is num) {
+      val = exp.toInt();
+    }
+    if (val > 60) return '60+';
+    return val.toString();
   }
 
   void _sendRequest(BuildContext context, String trainerId) {
@@ -98,15 +109,7 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () async {
-                  if (goalCtrl.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter your fitness goal.'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
+                  if (goalCtrl.text.trim().isEmpty) return;
                   Navigator.pop(ctx); 
                   try {
                     await _ds.sendTrainerRequest(trainerId, goalCtrl.text.trim());
@@ -137,8 +140,8 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
+        initialChildSize: 0.65,
+        minChildSize: 0.5,
         maxChildSize: 0.9,
         expand: false,
         builder: (_, controller) => ListView(
@@ -157,8 +160,35 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
             ),
             const SizedBox(height: 16),
             Text(t['full_name'] ?? 'Trainer', textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            if (t['experience_years'] != null)
-              Text('${t['experience_years']} years experience', textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
+            
+            const SizedBox(height: 4),
+            Text(
+              [t['email'], t['phone_number']].where((e) => e != null && e.toString().isNotEmpty).join('  •  '),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Column(
+                  children: [
+                    const Text('Experience', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text('${_formatExperience(t['experience_years'])} yrs', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ],
+                ),
+                Container(width: 1, height: 40, color: AppColors.border),
+                Column(
+                  children: [
+                    const Text('Hourly Rate', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text(t['hourly_rate'] != null ? '₹${t['hourly_rate']}/hr' : 'Contact', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
+                  ],
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
             
             if (t['bio'] != null && t['bio'].toString().trim().isNotEmpty) ...[
@@ -168,14 +198,36 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
               const SizedBox(height: 24),
             ],
             
-            if (t['certifications'] != null && t['certifications'].toString().trim().isNotEmpty) ...[
-              const Text('Certifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            if (t['specializations'] != null && t['specializations'].toString().trim().isNotEmpty) ...[
+              const Text('Specializations', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text(t['certifications'], style: const TextStyle(color: AppColors.textSecondary)),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: (t['specializations'] as String).split(',').map((s) => Chip(
+                  label: Text(s.trim(), style: const TextStyle(fontSize: 12)),
+                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  side: BorderSide.none,
+                )).toList(),
+              ),
               const SizedBox(height: 24),
             ],
 
-            // 🔥 DYNAMIC PROFILE CONTROLS
+            if (t['certifications'] != null && t['certifications'].toString().trim().isNotEmpty) ...[
+              const Text('Certifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: (t['certifications'] as String).split(',').map((s) => Chip(
+                  label: Text(s.trim(), style: const TextStyle(fontSize: 12)),
+                  backgroundColor: Colors.blueGrey.withOpacity(0.1),
+                  side: BorderSide.none,
+                )).toList(),
+              ),
+              const SizedBox(height: 24),
+            ],
+
             if (isCurrentTrainer) ...[
               const Divider(),
               const SizedBox(height: 16),
@@ -188,7 +240,6 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
                       label: const Text('Message', style: TextStyle(color: Colors.white)),
                       onPressed: () async {
                         try {
-                          // NOTE: Ensure your MessagingRemoteDataSource & ChatPage are imported!
                           final msgDs = sl<MessagingRemoteDataSource>(); 
                           final convData = await msgDs.startConversation(t['id']);
                           if (ctx.mounted) {
@@ -217,7 +268,6 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
                       icon: const Icon(Icons.hub, color: Colors.white),
                       label: const Text('Hub', style: TextStyle(color: Colors.white)),
                       onPressed: () {
-                        // NOTE: Ensure CoachingHubPage is imported!
                         Navigator.pushReplacement(
                           ctx,
                           MaterialPageRoute(builder: (_) => CoachingHubPage(trainerInfo: t)),
@@ -244,9 +294,9 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
                           TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
                           TextButton(
                             onPressed: () {
-                              Navigator.pop(dialogCtx); // Close Dialog
-                              Navigator.pop(ctx);       // Close Bottom Sheet
-                              _quitTrainer();           // Fire Trainer
+                              Navigator.pop(dialogCtx);
+                              Navigator.pop(ctx); 
+                              _quitTrainer(); 
                             },
                             child: const Text('Quit', style: TextStyle(color: AppColors.error)),
                           ),
@@ -257,7 +307,6 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
                 ),
               ),
             ] else ...[
-              // Default Close Button for Non-Current Trainers
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -304,6 +353,12 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
                             .where((s) => s.isNotEmpty) 
                             .toList() ?? [];
 
+                        final List<String> certs = (t['certifications'] as String?)
+                            ?.split(',')
+                            .map((s) => s.trim())
+                            .where((s) => s.isNotEmpty) 
+                            .toList() ?? [];
+
                         return InkWell(
                           onTap: () => _viewProfile(context, t),
                           borderRadius: BorderRadius.circular(16),
@@ -334,8 +389,19 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(t['full_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                          if (t['experience_years'] != null)
-                                            Text('${t['experience_years']} years experience', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                          
+                                          const SizedBox(height: 2),
+                                          Wrap(
+                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            children: [
+                                              if (t['experience_years'] != null)
+                                                Text('${_formatExperience(t['experience_years'])} yrs exp', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                              if (t['experience_years'] != null && t['phone_number'] != null)
+                                                const Text('  •  ', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                                              if (t['phone_number'] != null)
+                                                Text(t['phone_number'], style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                            ]
+                                          )
                                         ],
                                       ),
                                     ),
@@ -354,10 +420,24 @@ class _FindTrainerPageState extends State<FindTrainerPage> {
                                   const SizedBox(height: 8),
                                   Wrap(
                                     spacing: 6,
+                                    runSpacing: 4,
                                     children: specs.map((s) => Chip(
                                           label: Text(s, style: const TextStyle(fontSize: 11)),
                                           backgroundColor: AppColors.primary.withOpacity(0.08),
                                           side: BorderSide(color: AppColors.primary.withOpacity(0.3)),
+                                          padding: EdgeInsets.zero,
+                                        )).toList(),
+                                  ),
+                                ],
+                                if (certs.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: certs.map((s) => Chip(
+                                          label: Text(s, style: const TextStyle(fontSize: 10)),
+                                          backgroundColor: Colors.blueGrey.withOpacity(0.08),
+                                          side: BorderSide(color: Colors.blueGrey.withOpacity(0.3)),
                                           padding: EdgeInsets.zero,
                                         )).toList(),
                                   ),
