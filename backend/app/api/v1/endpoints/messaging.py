@@ -223,11 +223,12 @@ async def websocket_endpoint(
 
             # ── Send message to Abu <3 <3 ──────────────────────────────────────────────
           # ── Send message to Sahil<3──────────────────────────────────────────────
+            # ── Send message ──────────────────────────────────────────────
             if msg_type == "send_message":
                 conversation_id = data.get("conversation_id")
                 content = data.get("content", "").strip()
                 reply_to_id = data.get("reply_to_id") 
-                client_id = data.get("client_id") # 🔥 Capture the client_id from Flutter
+                client_id = data.get("client_id") 
                 
                 if not conversation_id or not content:
                     continue
@@ -241,6 +242,9 @@ async def websocket_endpoint(
                         conv_uuid = uuid.UUID(conversation_id)
                         conv = await messaging_service.get_conversation(db, conv_uuid, user.id)
                         
+                        # 🔥 FIX: Grab the other member BEFORE the commit expires the conv object
+                        other_user_id = next((str(m.user_id) for m in conv.members if str(m.user_id) != user_id), None)
+                        
                         msg = await messaging_service.save_message(
                             db, conv_uuid, user.id, content,
                             reply_to_id=uuid.UUID(reply_to_id) if reply_to_id else None
@@ -248,7 +252,6 @@ async def websocket_endpoint(
                         await db.commit()
                         await db.refresh(msg, ["reply_to"])
 
-                        # The core message dictionary
                         msg_dict = {
                             "id": str(msg.id),
                             "conversation_id": str(msg.conversation_id),
@@ -260,10 +263,9 @@ async def websocket_endpoint(
                             "created_at": msg.created_at.isoformat(),
                         }
 
-                        # 1. Send new_message to the OTHER user(s)
-                        other = next((m for m in conv.members if str(m.user_id) != user_id), None)
-                        if other:
-                            delivered = await manager.send(str(other.user_id), {
+                        # Send new_message to the OTHER user(s) using the safely extracted ID
+                        if other_user_id:
+                            delivered = await manager.send(other_user_id, {
                                 "type": "new_message",
                                 "message": msg_dict
                             })
@@ -273,7 +275,7 @@ async def websocket_endpoint(
                                     await db2.commit()
                                 msg_dict["status"] = "delivered"
 
-                        # 🔥 2. Send the EXPLICIT ACK directly back to the sender
+                        # Send the EXPLICIT ACK directly back to the sender
                         await manager.send(user_id, {
                             "type": "message_ack",
                             "client_id": client_id,
@@ -284,7 +286,31 @@ async def websocket_endpoint(
                         await db.rollback()
                         await manager.send(user_id, {"type": "error", "message": str(e)})
 
-            # ── Pin message ───────────────────────────────────────────────
+            # ── Mark read ─────────────────────────────────────────────────
+            elif msg_type == "mark_read":
+                conversation_id = data.get("conversation_id")
+                if not conversation_id:
+                    continue
+
+                async with AsyncSessionLocal() as db:
+                    try:
+                        conv_uuid = uuid.UUID(conversation_id)
+                        conv = await messaging_service.get_conversation(db, conv_uuid, user.id)
+                        
+                        # 🔥 FIX: Extract the other user ID BEFORE the commit
+                        other_user_id = next((str(m.user_id) for m in conv.members if str(m.user_id) != user_id), None)
+                        
+                        await messaging_service.mark_read(db, conv_uuid, user.id)
+                        await db.commit()
+
+                        if other_user_id:
+                            await manager.send(other_user_id, {
+                                "type": "messages_read",
+                                "conversation_id": conversation_id,
+                                "read_by": user_id,
+                            })
+                    except Exception:
+                        await db.rollback()   # ── Pin message ───────────────────────────────────────────────
             elif msg_type == "pin_message":
                 msg_id = data.get("message_id")
                 if not msg_id:
@@ -310,28 +336,6 @@ async def websocket_endpoint(
                     except Exception:
                         await db.rollback()
 
-            # ── Mark read ─────────────────────────────────────────────────
-            elif msg_type == "mark_read":
-                conversation_id = data.get("conversation_id")
-                if not conversation_id:
-                    continue
-
-                async with AsyncSessionLocal() as db:
-                    try:
-                        conv_uuid = uuid.UUID(conversation_id)
-                        conv = await messaging_service.get_conversation(db, conv_uuid, user.id)
-                        await messaging_service.mark_read(db, conv_uuid, user.id)
-                        await db.commit()
-
-                        other = next((m for m in conv.members if str(m.user_id) != user_id), None)
-                        if other:
-                            await manager.send(str(other.user_id), {
-                                "type": "messages_read",
-                                "conversation_id": conversation_id,
-                                "read_by": user_id,
-                            })
-                    except Exception:
-                        await db.rollback()
 
             # ── Typing ───────────────────────────────────────────────────
             elif msg_type == "typing":
