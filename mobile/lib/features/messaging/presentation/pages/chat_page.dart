@@ -60,7 +60,7 @@ class _ChatPageState extends State<ChatPage> {
       final msgs = await widget.ds.getMessages(widget.conversationId);
       setState(() {
         _messages.addAll(msgs.cast<Map<String, dynamic>>());
-        final pinned = _messages.lastWhere((m) => m['is_pinned'] == true, orElse: () => {});
+        final pinned = _messages.lastWhere((m) => m['is_pinned'] == true, orElse: () => <String, dynamic>{});
         if (pinned.isNotEmpty) {
           _pinnedMessage = pinned;
         }
@@ -70,35 +70,36 @@ class _ChatPageState extends State<ChatPage> {
 
     try {
       final ticket = await widget.ds.getWsTicket();
-      final wsBase = ApiConstants.baseUrl.replaceFirst('http', 'ws');
+      
+      // Clean up URL formation to prevent // errors resulting in 404
+      String wsBase = ApiConstants.baseUrl.replaceFirst('http', 'ws');
+      if (wsBase.endsWith('/')) wsBase = wsBase.substring(0, wsBase.length - 1);
+      
+      String apiVer = ApiConstants.apiVersion;
+      if (!apiVer.startsWith('/')) apiVer = '/$apiVer';
+
       _channel = WebSocketChannel.connect(
-        Uri.parse('$wsBase${ApiConstants.apiVersion}/messaging/ws?ticket=$ticket'),
+        Uri.parse('$wsBase$apiVer/messaging/ws?ticket=${Uri.encodeComponent(ticket)}'),
       );
+      
       setState(() => _connected = true);
 
       _channel!.stream.listen(
         (raw) {
           final data = jsonDecode(raw as String) as Map<String, dynamic>;
           final type = data['type'] as String?;
-// 🔥 NEW: Explicitly handle the acknowledgment of YOUR messages
+
           if (type == 'message_ack') {
             final clientId = data['client_id'];
             final savedMsg = Map<String, dynamic>.from(data['message'] as Map);
             
             setState(() {
-              // Find our optimistic message by its client ID
               final idx = _messages.indexWhere((m) => m['id'] == clientId || m['client_id'] == clientId);
-              
               if (idx != -1) {
-                // Restore the reply box if the backend didn't echo it back perfectly
                 if (savedMsg['reply_to'] == null && _messages[idx]['reply_to'] != null) {
                   savedMsg['reply_to'] = _messages[idx]['reply_to'];
                 }
-                
-                // Swap the fake 'local_' ID with the real UUID from the database
                 savedMsg['status'] = savedMsg['status'] == 'delivered' ? 'delivered' : 'sent';
-                
-                // Replace the temporary message entirely
                 _messages[idx] = savedMsg; 
               }
             });
@@ -116,7 +117,7 @@ class _ChatPageState extends State<ChatPage> {
               });
               _scrollToBottom();
             }
-          }else if (type == 'message_pinned') {
+          } else if (type == 'message_pinned') {
             setState(() {
               final idx = _messages.indexWhere((m) => m['id'] == data['message_id']);
               if (idx != -1) {
@@ -142,6 +143,13 @@ class _ChatPageState extends State<ChatPage> {
                 if (m['sender_id'] == widget.currentUserId) m['status'] = 'read';
               }
             });
+          } else if (type == 'error') {
+             // Let the UI know if the backend rejected a payload
+             if (mounted) {
+               ScaffoldMessenger.of(context).showSnackBar(
+                 SnackBar(content: Text('Server Error: ${data['message']}')),
+               );
+             }
           }
         },
         onDone: () { if (mounted) setState(() => _connected = false); },
@@ -157,14 +165,11 @@ class _ChatPageState extends State<ChatPage> {
     if (text.isEmpty || _channel == null) return;
 
     final currentReplyTo = _replyingTo;
-    
-    // 🔥 Generate a unique client-side ID
     final clientId = 'local_${DateTime.now().millisecondsSinceEpoch}';
 
-    // 1. Create the optimistic temporary message
     final tempMessage = {
-      'id': clientId, // Use it temporarily for the UI list
-      'client_id': clientId, // Store it explicitly
+      'id': clientId,
+      'client_id': clientId,
       'sender_id': widget.currentUserId,
       'conversation_id': widget.conversationId,
       'content': text,
@@ -174,18 +179,16 @@ class _ChatPageState extends State<ChatPage> {
       'is_pinned': false,
     };
 
-    // 2. Instantly update UI and clear input
     setState(() {
       _messages.add(tempMessage);
-      _replyingTo = null; // Clear the reply box immediately
+      _replyingTo = null;
     });
     _scrollToBottom();
     _inputCtrl.clear();
 
-    // 3. Build payload safely
     final payload = <String, dynamic>{
       'type': 'send_message',
-      'client_id': clientId, // 🔥 Send it to the backend
+      'client_id': clientId,
       'conversation_id': widget.conversationId,
       'content': text,
     };

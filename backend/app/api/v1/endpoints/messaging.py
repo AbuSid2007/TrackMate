@@ -83,8 +83,8 @@ async def get_messages(
             "sender_id": str(m.sender_id),
             "content": m.content,
             "status": m.status,
-            "is_pinned": m.is_pinned, # 🔥 Exposed to Flutter
-            "reply_to": {"id": str(m.reply_to.id), "content": m.reply_to.content} if m.reply_to else None, # 🔥 Exposed
+            "is_pinned": m.is_pinned,
+            "reply_to": {"id": str(m.reply_to.id), "content": m.reply_to.content} if m.reply_to else None,
             "is_deleted": m.is_deleted,
             "created_at": m.created_at.isoformat(),
         }
@@ -177,39 +177,41 @@ async def websocket_endpoint(
     await presence_service.set_online(user_id)
     await _broadcast_presence(user_id, online=True)
 
-    # Push unread summary to client on connect
-    async with AsyncSessionLocal() as db:
-        memberships_result = await db.execute(
-            select(ConversationMember).where(ConversationMember.user_id == user.id)
-        )
-        memberships = memberships_result.scalars().all()
+    # Push unread summary safely
+    try:
+        async with AsyncSessionLocal() as db:
+            memberships_result = await db.execute(
+                select(ConversationMember).where(ConversationMember.user_id == user.id)
+            )
+            memberships = memberships_result.scalars().all()
 
-        unread_conversations = []
-        for membership in memberships:
-            unread_result = await db.execute(
-                select(func.count(Message.id)).where(
-                    and_(
-                        Message.conversation_id == membership.conversation_id,
-                        Message.sender_id != user.id,
-                        Message.created_at > (
-                            membership.last_read_at or
-                            datetime.min.replace(tzinfo=timezone.utc)
-                        ),
+            unread_conversations = []
+            for membership in memberships:
+                unread_result = await db.execute(
+                    select(func.count(Message.id)).where(
+                        and_(
+                            Message.conversation_id == membership.conversation_id,
+                            Message.sender_id != user.id,
+                            Message.created_at > (
+                                membership.last_read_at or datetime.min.replace(tzinfo=timezone.utc)
+                            ),
+                        )
                     )
                 )
-            )
-            count = unread_result.scalar_one()
-            if count > 0:
-                unread_conversations.append({
-                    "conversation_id": str(membership.conversation_id),
-                    "unread_count": count,
-                })
+                count = unread_result.scalar_one()
+                if count > 0:
+                    unread_conversations.append({
+                        "conversation_id": str(membership.conversation_id),
+                        "unread_count": count,
+                    })
 
-        if unread_conversations:
-            await manager.send(user_id, {
-                "type": "unread_summary",
-                "conversations": unread_conversations,
-            })
+            if unread_conversations:
+                await manager.send(user_id, {
+                    "type": "unread_summary",
+                    "conversations": unread_conversations,
+                })
+    except Exception as e:
+        print(f"Error sending unread summary: {e}")
             
     try:
         while True:
@@ -221,34 +223,33 @@ async def websocket_endpoint(
 
             msg_type = data.get("type")
 
-            # ── Send message to Abu <3 <3 ──────────────────────────────────────────────
-          # ── Send message to Sahil<3──────────────────────────────────────────────
-            # ── Send message ──────────────────────────────────────────────
-            if msg_type == "send_message":
-                conversation_id = data.get("conversation_id")
-                content = data.get("content", "").strip()
-                reply_to_id = data.get("reply_to_id") 
-                client_id = data.get("client_id") 
-                
-                if not conversation_id or not content:
-                    continue
+            # 🔥 FIX: Wrap ALL processing in a try/except to prevent the socket from dying
+            try:
+                # ── Send message ──────────────────────────────────────────────
+                if msg_type == "send_message":
+                    conversation_id = data.get("conversation_id")
+                    content = data.get("content", "").strip()
+                    reply_to_id = data.get("reply_to_id") 
+                    client_id = data.get("client_id") 
                     
-                if len(content) > 2000:
-                    await manager.send(user_id, {"type": "error", "message": "Message exceeds 2000 characters."})
-                    continue
+                    if not conversation_id or not content:
+                        continue
+                        
+                    if len(content) > 2000:
+                        await manager.send(user_id, {"type": "error", "message": "Message exceeds 2000 characters."})
+                        continue
 
-                async with AsyncSessionLocal() as db:
-                    try:
-                        from sqlalchemy import select # Ensure this is imported at the top of your file
-                        from app.models.messaging import Message
-                        
+                    async with AsyncSessionLocal() as db:
                         conv_uuid = uuid.UUID(conversation_id)
-                        conv = await messaging_service.get_conversation(db, conv_uuid, user.id)
                         
-                        # Grab the other member before the commit
-                        other_user_id = next((str(m.user_id) for m in conv.members if str(m.user_id) != user_id), None)
+                        # Grab the other member query-based safely (avoids MissingGreenlet errors)
+                        other_member_query = await db.execute(
+                            select(ConversationMember.user_id)
+                            .where(and_(ConversationMember.conversation_id == conv_uuid, ConversationMember.user_id != user.id))
+                        )
+                        other_user_id_obj = other_member_query.scalar_one_or_none()
+                        other_user_id = str(other_user_id_obj) if other_user_id_obj else None
                         
-                        # 🔥 FIX: Explicitly fetch the replied message safely
                         reply_to_data = None
                         if reply_to_id:
                             replied_msg_result = await db.execute(select(Message).where(Message.id == uuid.UUID(reply_to_id)))
@@ -269,11 +270,10 @@ async def websocket_endpoint(
                             "content": msg.content,
                             "status": msg.status,
                             "is_pinned": msg.is_pinned,
-                            "reply_to": reply_to_data, # 🔥 Use the safely extracted dictionary
+                            "reply_to": reply_to_data,
                             "created_at": msg.created_at.isoformat(),
                         }
 
-                        # Send new_message to the OTHER user(s)
                         if other_user_id:
                             delivered = await manager.send(other_user_id, {
                                 "type": "new_message",
@@ -285,30 +285,27 @@ async def websocket_endpoint(
                                     await db2.commit()
                                 msg_dict["status"] = "delivered"
 
-                        # Send the EXPLICIT ACK directly back to the sender
                         await manager.send(user_id, {
                             "type": "message_ack",
                             "client_id": client_id,
                             "message": msg_dict
                         })
+                            
+                # ── Mark read ─────────────────────────────────────────────────
+                elif msg_type == "mark_read":
+                    conversation_id = data.get("conversation_id")
+                    if not conversation_id:
+                        continue
 
-                    except Exception as e:
-                        await db.rollback()
-                        await manager.send(user_id, {"type": "error", "message": str(e)})
-                        
-            # ── Mark read ─────────────────────────────────────────────────
-            elif msg_type == "mark_read":
-                conversation_id = data.get("conversation_id")
-                if not conversation_id:
-                    continue
-
-                async with AsyncSessionLocal() as db:
-                    try:
+                    async with AsyncSessionLocal() as db:
                         conv_uuid = uuid.UUID(conversation_id)
-                        conv = await messaging_service.get_conversation(db, conv_uuid, user.id)
                         
-                        # 🔥 FIX: Extract the other user ID BEFORE the commit
-                        other_user_id = next((str(m.user_id) for m in conv.members if str(m.user_id) != user_id), None)
+                        other_member_query = await db.execute(
+                            select(ConversationMember.user_id)
+                            .where(and_(ConversationMember.conversation_id == conv_uuid, ConversationMember.user_id != user.id))
+                        )
+                        other_user_id_obj = other_member_query.scalar_one_or_none()
+                        other_user_id = str(other_user_id_obj) if other_user_id_obj else None
                         
                         await messaging_service.mark_read(db, conv_uuid, user.id)
                         await db.commit()
@@ -319,19 +316,16 @@ async def websocket_endpoint(
                                 "conversation_id": conversation_id,
                                 "read_by": user_id,
                             })
-                    except Exception:
-                        await db.rollback()   # ── Pin message ───────────────────────────────────────────────
-            elif msg_type == "pin_message":
-                msg_id = data.get("message_id")
-                if not msg_id:
-                    continue
-                    
-                async with AsyncSessionLocal() as db:
-                    try:
+
+                # ── Pin message ───────────────────────────────────────────────
+                elif msg_type == "pin_message":
+                    msg_id = data.get("message_id")
+                    if not msg_id:
+                        continue
+                        
+                    async with AsyncSessionLocal() as db:
                         msg = await messaging_service.toggle_pin(db, uuid.UUID(msg_id), user.id)
                         await db.commit()
-                        
-                        conv = await messaging_service.get_conversation(db, msg.conversation_id, user.id)
                         
                         broadcast_payload = {
                             "type": "message_pinned",
@@ -340,38 +334,44 @@ async def websocket_endpoint(
                             "content": msg.content
                         }
                         
-                        # Tell everyone in the chat that the pin status changed
-                        for member in conv.members:
-                            await manager.send(str(member.user_id), broadcast_payload)
-                    except Exception:
-                        await db.rollback()
+                        # Fetch members safely to notify all
+                        members_query = await db.execute(
+                            select(ConversationMember.user_id)
+                            .where(ConversationMember.conversation_id == msg.conversation_id)
+                        )
+                        for member_id in members_query.scalars().all():
+                            await manager.send(str(member_id), broadcast_payload)
 
+                # ── Typing ───────────────────────────────────────────────────
+                elif msg_type == "typing":
+                    conversation_id = data.get("conversation_id")
+                    if not conversation_id:
+                        continue
 
-            # ── Typing ───────────────────────────────────────────────────
-            elif msg_type == "typing":
-                conversation_id = data.get("conversation_id")
-                if not conversation_id:
-                    continue
+                    await presence_service.set_typing(conversation_id, user_id)
 
-                await presence_service.set_typing(conversation_id, user_id)
-
-                async with AsyncSessionLocal() as db:
-                    try:
-                        conv = await messaging_service.get_conversation(db, uuid.UUID(conversation_id), user.id)
-                        other = next((m for m in conv.members if str(m.user_id) != user_id), None)
-                        if other:
-                            await manager.send(str(other.user_id), {
+                    async with AsyncSessionLocal() as db:
+                        other_member_query = await db.execute(
+                            select(ConversationMember.user_id)
+                            .where(and_(ConversationMember.conversation_id == uuid.UUID(conversation_id), ConversationMember.user_id != user.id))
+                        )
+                        other_user_id_obj = other_member_query.scalar_one_or_none()
+                        
+                        if other_user_id_obj:
+                            await manager.send(str(other_user_id_obj), {
                                 "type": "typing",
                                 "conversation_id": conversation_id,
                                 "user_id": user_id,
                             })
-                    except Exception:
-                        pass
 
-            # ── Heartbeat ─────────────────────────────────────────────────
-            elif msg_type == "heartbeat":
-                await presence_service.heartbeat(user_id)
-                await manager.send(user_id, {"type": "heartbeat_ack"})
+                # ── Heartbeat ─────────────────────────────────────────────────
+                elif msg_type == "heartbeat":
+                    await presence_service.heartbeat(user_id)
+                    await manager.send(user_id, {"type": "heartbeat_ack"})
+            
+            except Exception as e:
+                # Catch internal processing errors to prevent dropping the socket!
+                await manager.send(user_id, {"type": "error", "message": f"Processing Error: {str(e)}"})
 
     except WebSocketDisconnect:
         pass
