@@ -13,11 +13,11 @@ import 'package:dio/dio.dart';
 import '../../../analytics/presentation/pages/analytics_page.dart';
 
 const List<Map<String, dynamic>> localExercises = [
-  {"id": "1", "name": "Barbell Squat", "type": "strength", "multiplier": 3.0, "image": "assets/images/barbell_squat.jpg"},
-  {"id": "2", "name": "Push-up", "type": "strength", "multiplier": 4.0, "image": "assets/images/push_up.jpg"},
-  {"id": "3", "name": "Deadlift", "type": "strength", "multiplier": 3.0, "image": "assets/images/deadlift.jpg"},
-  {"id": "4", "name": "Pull-up", "type": "strength", "multiplier": 4.0, "image": "assets/images/pull_up.jpg"},
-  {"id": "5", "name": "Plank", "type": "time", "multiplier": 1.75, "image": "assets/images/plank.jpg"},
+  {"id": "1", "name": "Barbell Squat", "type": "strength", "multiplier": 3.0, "image": "assets/images/running.jpg"},
+  {"id": "2", "name": "Push-up", "type": "strength", "multiplier": 4.0, "image": "assets/images/running.jpg"},
+  {"id": "3", "name": "Deadlift", "type": "strength", "multiplier": 3.0, "image": "assets/images/running.jpg"},
+  {"id": "4", "name": "Pull-up", "type": "strength", "multiplier": 4.0, "image": "assets/images/running.jpg"},
+  {"id": "5", "name": "Plank", "type": "time", "multiplier": 1.75, "image": "assets/images/running.jpg"},
   {"id": "6", "name": "Running", "type": "time", "multiplier": 4.8, "image": "assets/images/running.jpg"},
   {"id": "7", "name": "Dumbbell Bicep Curl", "type": "strength", "multiplier": 1.75, "image": "assets/images/dumbbell_bicep_curl.jpg"},
   {"id": "8", "name": "Burpee", "type": "time", "multiplier": 4.25, "image": "assets/images/burpee.jpg"},
