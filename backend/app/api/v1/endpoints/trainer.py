@@ -59,6 +59,51 @@ async def submit_application(
     return {"application_id": str(app.id), "status": app.status}
 
 
+@router.get("/application", status_code=status.HTTP_200_OK)
+async def get_my_application(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    app = await trainer_service.get_my_application(db, current_user.id)
+    if not app:
+        return {"application": None}
+    return {
+        "application": {
+            "phone_number": app.phone_number,
+            "experience_years": app.experience_years,
+            "about": app.about,
+            "specializations": app.specializations,
+            "certifications": app.certifications,
+            "hourly_rate": app.hourly_rate,
+            "status": app.status,
+        }
+    }
+
+
+@router.put("/application", status_code=status.HTTP_200_OK)
+async def update_application(
+    payload: TrainerApplicationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    app = await trainer_service.update_application(
+        db, current_user.id,
+        payload.phone_number, payload.experience_years,
+        payload.about, payload.specializations,
+        payload.certifications, payload.hourly_rate,
+    )
+    return {"application_id": str(app.id), "status": app.status}
+
+
+@router.delete("/application", status_code=status.HTTP_200_OK)
+async def withdraw_application(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await trainer_service.withdraw_application(db, current_user.id)
+    return {"message": "Application withdrawn"}
+
+
 # ── Trainee: Browse & Request Trainers ────────────────────────────────────────
 
 @router.get("/available", status_code=status.HTTP_200_OK)
@@ -224,6 +269,7 @@ async def schedule_session(
         "session_id": str(session.id),
         "scheduled_at": session.scheduled_at.isoformat(),
         "duration_minutes": session.duration_minutes,
+        "hourly_rate_snapshot": session.hourly_rate_snapshot,
     }
     
 from app.services.fitness_service import fitness_service as fs
@@ -350,6 +396,7 @@ async def get_my_sessions(
             "trainer": {"id": str(s.trainer_id), "full_name": s.trainer.full_name},
             "scheduled_at": s.scheduled_at.isoformat(),
             "duration_minutes": s.duration_minutes,
+            "hourly_rate_snapshot": s.hourly_rate_snapshot,
             "notes": s.notes,
         }
         for s in sessions

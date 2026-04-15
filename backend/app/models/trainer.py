@@ -58,6 +58,7 @@ class TrainerSession(Base):
     trainee_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    hourly_rate_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 

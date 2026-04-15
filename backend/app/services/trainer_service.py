@@ -79,26 +79,44 @@ class TrainerService:
         if not app:
             raise NotFoundError("Application not found")
 
+        requires_review = False
+
+        if certifications is not None and certifications != app.certifications:
+            app.certifications = certifications
+            requires_review = True
+        if specializations is not None and specializations != app.specializations:
+            app.specializations = specializations
+            requires_review = True
+        if experience_years is not None and experience_years != app.experience_years:
+            app.experience_years = experience_years
+            requires_review = True
+
         if phone_number is not None: app.phone_number = phone_number
-        if experience_years is not None: app.experience_years = experience_years
         if about is not None: app.about = about
-        if specializations is not None: app.specializations = specializations
-        if certifications is not None: app.certifications = certifications
         if hourly_rate is not None: app.hourly_rate = hourly_rate
 
-        # Sync profile updates as well
+        if requires_review:
+            app.status = "pending"
+
+        # Sync profile updates 
         from app.services.profile_service import profile_service
         from app.schemas.profile import ProfileUpdateRequest
         from app.models.user import User as UserModel
         
-        user_result = await db.execute(select(UserModel).where(UserModel.id == user_id))
+        user_result = await db.execute(
+            select(UserModel)
+            .where(UserModel.id == user_id)
+            .options(selectinload(UserModel.profile))
+        )
         user = user_result.scalar_one_or_none()
+        
         if user:
             await profile_service.update_profile(db, user, ProfileUpdateRequest(
                 phone_number=app.phone_number,
                 hourly_rate=app.hourly_rate,
-                specializations=app.specializations,
-                experience_years=app.experience_years,
+                bio=app.about,
+                specializations=app.specializations if not requires_review and app.status == 'approved' else (user.profile.specializations if user.profile else None),
+                experience_years=app.experience_years if not requires_review and app.status == 'approved' else (user.profile.experience_years if user.profile else None),
             ))
 
         await db.flush()
@@ -362,11 +380,19 @@ class TrainerService:
         if not trainee_result.scalar_one_or_none():
             raise ForbiddenError("Not your student")
 
+        app_res = await db.execute(select(TrainerApplication).where(TrainerApplication.user_id == trainer.id))
+        app = app_res.scalar_one_or_none()
+        
+        profile_res = await db.execute(select(User).where(User.id == trainer.id).options(selectinload(User.profile)))
+        tr_user = profile_res.scalar_one_or_none()
+        current_rate = app.hourly_rate if app else (tr_user.profile.hourly_rate if tr_user and tr_user.profile else None)
+
         session = TrainerSession(
             trainer_id=trainer.id,
             trainee_id=trainee_id,
             scheduled_at=scheduled_at,
             duration_minutes=duration_minutes,
+            hourly_rate_snapshot=current_rate,
             notes=notes,
         )
         db.add(session)
@@ -388,6 +414,7 @@ class TrainerService:
                 "trainee": {"id": str(s.trainee_id), "full_name": s.trainee.full_name},
                 "scheduled_at": s.scheduled_at.isoformat(),
                 "duration_minutes": s.duration_minutes,
+                "hourly_rate_snapshot": s.hourly_rate_snapshot,
                 "notes": s.notes,
             }
             for s in sessions
