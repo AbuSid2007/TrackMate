@@ -4,9 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from pydantic import BaseModel
 
-from app.services.auth_service import auth_service
 from app.schemas.auth import ApproveTrainerRequest
-
 from app.db.base import get_db
 from app.api.v1.deps import require_admin
 from app.models.user import User
@@ -26,9 +24,10 @@ async def approve_trainer(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    user = await auth_service.approve_trainer(db, str(user_id), payload.approve, admin)
-    from app.schemas.auth import UserResponse
-    return UserResponse.model_validate(user)
+    result = await admin_service.resolve_trainer_application(db, str(user_id), payload.approve, admin)
+    return {"message": "Success", "status": result["status"], "role": result["role"]}
+
+
 @router.get("/stats", status_code=status.HTTP_200_OK)
 async def get_stats(
     admin: User = Depends(require_admin),
@@ -105,13 +104,22 @@ async def activate_user(
     return {"message": f"{user.full_name} activated"}
 
 
-@router.get("/trainer-applications", status_code=status.HTTP_200_OK)
-async def get_trainer_applications(
+@router.get("/trainer-applications/new", status_code=status.HTTP_200_OK)
+async def get_new_admissions(
     status: Optional[str] = Query(default=None),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await admin_service.get_trainer_applications(db, status)
+    return await admin_service.get_new_admissions(db, status)
+
+
+@router.get("/trainer-applications/updates", status_code=status.HTTP_200_OK)
+async def get_profile_updates(
+    status: Optional[str] = Query(default=None),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await admin_service.get_profile_updates(db, status)
 
 
 @router.get("/reports", status_code=status.HTTP_200_OK)

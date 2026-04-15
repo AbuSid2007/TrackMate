@@ -370,7 +370,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       Text(isUpdating ? 'Update Application' : 'Trainer Application', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      const Text('All fields are mandatory.', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      const Text('Changes to sensitive fields (Certifications, Experience) will trigger an Admin re-review.', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                       const SizedBox(height: 16),
 
                       TextFormField(
@@ -402,7 +402,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const SizedBox(height: 16),
 
-                      // 🔥 NEW: Explicit bounds checking for Bio length
                       TextFormField(
                         controller: aboutCtrl,
                         maxLines: 3,
@@ -531,7 +530,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               final prefs = await SharedPreferences.getInstance();
                               await prefs.setString('trainer_application', jsonEncode(payload));
 
-                              setState(() { _savedApplication = payload; });
+                              setState(() { _savedApplication = payload; _load(); });
 
                               if (ctx.mounted) Navigator.pop(ctx);
 
@@ -610,6 +609,40 @@ class _SettingsPageState extends State<SettingsPage> {
               _dateTile(context),
             ]),
             const SizedBox(height: 20),
+            
+            // ── TRAINER ONLY: PROFESSIONAL INFORMATION ───────────────────────
+            if (isTrainer) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _header('Professional Information'),
+                  if (_savedApplication?['status'] == 'pending')
+                    Padding(
+                      padding: const EdgeInsets.only(right: 16.0, bottom: 8.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                        child: const Text('Under Review', style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                ],
+              ),
+              _card([
+                _infoTile('Phone', _savedApplication?['phone_number']?.toString() ?? 'Not set'),
+                _infoTile('Experience', '${_savedApplication?['experience_years'] ?? 0} years'),
+                _infoTile('Hourly Rate', '₹${_savedApplication?['hourly_rate'] ?? 0}'),
+                _infoTile('Certifications', _savedApplication?['certifications']?.toString() ?? 'None'),
+                _infoTile('Specializations', _savedApplication?['specializations']?.toString() ?? 'None'),
+                const Divider(height: 1, color: AppColors.border),
+                ListTile(
+                  leading: const Icon(Icons.edit, color: AppColors.primary, size: 20),
+                  title: const Text('Edit Professional Details', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.primary, size: 20),
+                  onTap: () => _showTrainerApplicationDialog(context, existingData: _savedApplication),
+                ),
+              ]),
+              const SizedBox(height: 20),
+            ],
 
             if (!isTrainer) ...[
               _header('Body Metrics'),
@@ -736,9 +769,15 @@ class _SettingsPageState extends State<SettingsPage> {
     child: Column(children: children),
   );
 
-  Widget _infoTile(String label, String value) => ListTile(
-    title: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-    trailing: Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+  Widget _infoTile(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 2, child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
+        Expanded(flex: 3, child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500), textAlign: TextAlign.right)),
+      ],
+    ),
   );
 
   Widget _inputTile(String label, TextEditingController ctrl, {int maxLines = 1, bool isNumber = false, int? maxLength}) =>

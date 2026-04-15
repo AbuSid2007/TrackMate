@@ -43,6 +43,8 @@ class ApiConstants {
   static const String adminTrainerApplications = '$apiVersion/admin/trainer-applications';
   static const String adminReports = '$apiVersion/admin/reports';
   static const String adminFlaggedMessages = '$apiVersion/admin/reports/flagged-messages';
+  static const String adminNewAdmissions = '$apiVersion/admin/trainer-applications/new';
+  static const String adminProfileUpdates = '$apiVersion/admin/trainer-applications/updates';
 
   // Messaging
   static const String conversations = '$apiVersion/messaging/conversations';

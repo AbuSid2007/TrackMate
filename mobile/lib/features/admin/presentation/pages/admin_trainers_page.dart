@@ -15,7 +15,8 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
   
   Map<String, dynamic> _data = {}; 
   bool _loading = true;
-  String _currentTab = 'pending';
+  String _currentTab = 'pending'; // 'pending', 'approved', 'rejected'
+  String _category = 'new'; // 'new' (Admissions) or 'updates' (Profile Updates)
 
   @override
   void initState() {
@@ -27,26 +28,25 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
     if (!mounted) return;
     setState(() => _loading = true);
     try {
-      // 🔥 FRONTEND TRICK: Fetch all tabs to find the LATEST status for each user
-      final pRes = await _ds.getTrainerApplications(status: 'pending');
-      final aRes = await _ds.getTrainerApplications(status: 'approved');
-      final rRes = await _ds.getTrainerApplications(status: 'rejected');
+      final Future<Map<String, dynamic>> Function({String? status}) fetchFunc = 
+        _category == 'new' ? _ds.getNewAdmissions : _ds.getProfileUpdates;
 
-      // Inject the status into the objects so we can track them after combining
+      final pRes = await fetchFunc(status: 'pending'); 
+      final aRes = await fetchFunc(status: 'approved');
+      final rRes = await fetchFunc(status: 'rejected');
+
       final pApps = (pRes['applications'] as List? ?? []).map((e) => {...e as Map<String,dynamic>, 'status': 'pending'}).toList();
       final aApps = (aRes['applications'] as List? ?? []).map((e) => {...e as Map<String,dynamic>, 'status': 'approved'}).toList();
       final rApps = (rRes['applications'] as List? ?? []).map((e) => {...e as Map<String,dynamic>, 'status': 'rejected'}).toList();
 
       final allAppsList = [...pApps, ...aApps, ...rApps];
 
-      // 🔥 FIX: Sort by date (newest first) using both possible date keys
       allAppsList.sort((a, b) {
         final dateA = DateTime.tryParse(a['created_at']?.toString() ?? a['submitted_at']?.toString() ?? '') ?? DateTime(2000);
         final dateB = DateTime.tryParse(b['created_at']?.toString() ?? b['submitted_at']?.toString() ?? '') ?? DateTime(2000);
         return dateB.compareTo(dateA); 
       });
 
-      // Deduplicate by user_id, keeping only the most recent application
       final Map<String, dynamic> latestAppsPerUser = {};
       for (final app in allAppsList) {
         final uid = app['user_id'] ?? app['id'];
@@ -57,7 +57,6 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
 
       final filteredApps = latestAppsPerUser.values.toList();
       
-      // Recalculate summary dynamically based on the deduplicated list
       int countP = 0, countA = 0, countR = 0;
       final List<dynamic> currentTabApps = [];
 
@@ -92,7 +91,7 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
       if (!mounted) return;
       
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(approve ? 'Trainer Approved' : 'Application Rejected'),
+        content: Text(approve ? 'Request Approved' : 'Request Rejected'),
         backgroundColor: approve ? Colors.green : Colors.red,
       ));
       
@@ -126,6 +125,49 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
         ),
         title: const Text('Trainer Applications', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
         backgroundColor: AppColors.surface,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _category == 'new' ? AppColors.primary : Colors.grey.shade200,
+                      foregroundColor: _category == 'new' ? Colors.white : Colors.black87,
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      if (_category != 'new') {
+                        setState(() => _category = 'new');
+                        _load();
+                      }
+                    },
+                    child: const Text('New Admissions'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _category == 'updates' ? AppColors.primary : Colors.grey.shade200,
+                      foregroundColor: _category == 'updates' ? Colors.white : Colors.black87,
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      if (_category != 'updates') {
+                        setState(() => _category = 'updates');
+                        _load();
+                      }
+                    },
+                    child: const Text('Profile Updates'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
       body: Column(
         children: [
@@ -150,7 +192,7 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
                     onRefresh: _load,
                     child: apps.isEmpty
                         ? Center(
-                            child: Text('No $_currentTab applications found.', style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                            child: Text('No $_currentTab requests found in this category.', style: const TextStyle(color: Colors.grey, fontSize: 14)),
                           )
                         : ListView.builder(
                             padding: const EdgeInsets.all(16),
@@ -196,8 +238,42 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
     );
   }
 
+  Widget _buildDiff(String label, dynamic oldVal, dynamic newVal) {
+    final oStr = oldVal?.toString() ?? 'None';
+    final nStr = newVal?.toString() ?? 'None';
+    
+    if (oStr == nStr) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8.0),
+        child: Text('$label: $nStr', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+      );
+    }
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$label:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(oStr, style: const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.red, fontSize: 13)),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: Icon(Icons.arrow_right_alt, size: 16, color: Colors.grey),
+              ),
+              Text(nStr, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTrainerCard(Map<String, dynamic> app) {
     final userId = app['user_id'] ?? app['id'] ?? '';
+    final bool isUpdate = _category == 'updates';
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -214,17 +290,44 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(app['full_name'] ?? 'Unknown User', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              // 🔥 FIX: Ensures the date renders correctly by checking both keys
               Text(_formatDate(app['created_at']?.toString() ?? app['submitted_at']?.toString()), style: const TextStyle(color: Colors.grey, fontSize: 12)),
             ],
           ),
           Text(app['email'] ?? 'No email', style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 12),
-          Text(app['about'] ?? 'No bio provided.', style: const TextStyle(fontSize: 13)),
-          if (app['specializations'] != null) ...[
-            const SizedBox(height: 8),
-            Text('Specializations: ${app['specializations']}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+          
+          if (!isUpdate) ...[
+            Text(app['about'] ?? 'No bio provided.', style: const TextStyle(fontSize: 13)),
+            if (app['specializations'] != null) ...[
+              const SizedBox(height: 8),
+              Text('Specializations: ${app['specializations']}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+            ],
+            if (app['certifications'] != null) ...[
+              const SizedBox(height: 4),
+              Text('Certifications: ${app['certifications']}', style: const TextStyle(color: Colors.black87, fontSize: 12)),
+            ],
+            if (app['experience_years'] != null) ...[
+              const SizedBox(height: 4),
+              Text('Experience: ${app['experience_years']} years', style: const TextStyle(color: Colors.black87, fontSize: 12)),
+            ]
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              width: double.infinity,
+              decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Requested Changes:', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 12)),
+                  const SizedBox(height: 8),
+                  _buildDiff('Experience (Years)', app['old_experience_years'], app['experience_years']),
+                  _buildDiff('Specializations', app['old_specializations'], app['specializations']),
+                  _buildDiff('Certifications', app['old_certifications'], app['certifications']),
+                ],
+              ),
+            )
           ],
+
           const SizedBox(height: 16),
           
           if (_currentTab == 'pending')
@@ -254,7 +357,7 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
                 onPressed: () => _respond(userId, false),
                 icon: const Icon(Icons.cancel, color: Colors.red, size: 18),
                 style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
-                label: const Text('Revoke Approval / Reject', style: TextStyle(color: Colors.red)),
+                label: const Text('Revoke / Reject', style: TextStyle(color: Colors.red)),
               ),
             )
           else if (_currentTab == 'rejected')
@@ -264,7 +367,7 @@ class _AdminTrainersPageState extends State<AdminTrainersPage> {
                 onPressed: () => _respond(userId, true), 
                 icon: const Icon(Icons.check_circle, color: Colors.white, size: 18),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                label: const Text('Re-Approve Trainer', style: TextStyle(color: Colors.white)),
+                label: const Text('Re-Approve', style: TextStyle(color: Colors.white)),
               ),
             )
         ],

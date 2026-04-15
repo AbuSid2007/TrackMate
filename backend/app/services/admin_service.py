@@ -33,7 +33,6 @@ class AdminService:
         )
         pending_applications = pending_applications.scalar_one()
 
-        # 🔥 FIX: Safely check Redis so a downed Redis server doesn't crash the whole dashboard
         active_sessions = 0
         try:
             from app.core.redis import get_redis
@@ -44,7 +43,6 @@ class AdminService:
         except Exception as e:
             print(f"Redis skipped for stats: {e}")
 
-        # Growth rate — random plausible number for now
         growth_rate = round(random.uniform(2.5, 8.5), 1)
 
         return {
@@ -81,50 +79,110 @@ class AdminService:
         await db.flush()
         return user
 
-  # Changed return type hint to dict, since you return a dictionary, not a list
-    async def get_trainer_applications(self, db: AsyncSession, status: str | None = None) -> dict:
-        # THE FIX: Chain selectinload to load the profile so it doesn't crash!
-        query = select(TrainerApplication).options(
-            selectinload(TrainerApplication.user).selectinload(User.profile)
-        )
+    async def get_new_admissions(self, db: AsyncSession, status: str | None = None) -> dict:
+        base_query = select(TrainerApplication).join(User, TrainerApplication.user_id == User.id).where(User.role != UserRole.TRAINER)
+        
+        query = base_query.options(selectinload(TrainerApplication.user).selectinload(User.profile))
         if status:
             query = query.where(TrainerApplication.status == status)
         query = query.order_by(TrainerApplication.submitted_at.desc())
+        
         result = await db.execute(query)
         apps = result.scalars().all()
 
-        total = await db.execute(select(func.count(TrainerApplication.id)))
-        pending = await db.execute(select(func.count(TrainerApplication.id)).where(TrainerApplication.status == "pending"))
-        approved = await db.execute(select(func.count(TrainerApplication.id)).where(TrainerApplication.status == "approved"))
-        rejected = await db.execute(select(func.count(TrainerApplication.id)).where(TrainerApplication.status == "rejected"))
+        total = await db.execute(select(func.count(TrainerApplication.id)).join(User).where(User.role != UserRole.TRAINER))
+        pending = await db.execute(select(func.count(TrainerApplication.id)).join(User).where(User.role != UserRole.TRAINER, TrainerApplication.status == "pending"))
+        approved = await db.execute(select(func.count(TrainerApplication.id)).join(User).where(User.role != UserRole.TRAINER, TrainerApplication.status == "approved"))
+        rejected = await db.execute(select(func.count(TrainerApplication.id)).join(User).where(User.role != UserRole.TRAINER, TrainerApplication.status == "rejected"))
+        
         return {
-            "summary": {
-                "total": total.scalar_one(),
-                "pending": pending.scalar_one(),
-                "approved": approved.scalar_one(),
-                "rejected": rejected.scalar_one(),
-            },
-            "applications": [
-                {
-                    "id": str(a.id),
-                    "user_id": str(a.user_id),
-                    "full_name": a.user.full_name if a.user else "Unknown",
-                    "email": a.user.email if a.user else "Unknown",
-                    # Safely check for profile before accessing it
-                    "profile_image_url": a.user.profile.profile_image_url if a.user and a.user.profile else None,
-                    "phone_number": a.phone_number,
-                    "experience_years": a.experience_years,
-                    "about": a.about,
-                    "specializations": a.specializations,
-                    "certifications": a.certifications,
-                    "hourly_rate": a.hourly_rate,
-                    "status": a.status,
-                    "submitted_at": a.submitted_at.isoformat(),
-                    "reviewed_at": a.reviewed_at.isoformat() if a.reviewed_at else None,
-                }
-                for a in apps
-            ]
+            "summary": {"total": total.scalar_one(), "pending": pending.scalar_one(), "approved": approved.scalar_one(), "rejected": rejected.scalar_one()},
+            "applications": [self._format_app(a) for a in apps]
         }
+
+    # ── SPLIT 2: Profile Updates (Approved Trainers updating info) ──
+    async def get_profile_updates(self, db: AsyncSession, status: str | None = None) -> dict:
+        base_query = select(TrainerApplication).join(User, TrainerApplication.user_id == User.id).where(User.role == UserRole.TRAINER)
+        
+        query = base_query.options(selectinload(TrainerApplication.user).selectinload(User.profile))
+        if status:
+            query = query.where(TrainerApplication.status == status)
+        query = query.order_by(TrainerApplication.submitted_at.desc())
+        
+        result = await db.execute(query)
+        apps = result.scalars().all()
+
+        total = await db.execute(select(func.count(TrainerApplication.id)).join(User).where(User.role == UserRole.TRAINER))
+        pending = await db.execute(select(func.count(TrainerApplication.id)).join(User).where(User.role == UserRole.TRAINER, TrainerApplication.status == "pending"))
+        approved = await db.execute(select(func.count(TrainerApplication.id)).join(User).where(User.role == UserRole.TRAINER, TrainerApplication.status == "approved"))
+        rejected = await db.execute(select(func.count(TrainerApplication.id)).join(User).where(User.role == UserRole.TRAINER, TrainerApplication.status == "rejected"))
+        
+        return {
+            "summary": {"total": total.scalar_one(), "pending": pending.scalar_one(), "approved": approved.scalar_one(), "rejected": rejected.scalar_one()},
+            "applications": [self._format_app(a, include_diff=True) for a in apps]
+        }
+
+    def _format_app(self, a: TrainerApplication, include_diff: bool = False) -> dict:
+        data = {
+            "id": str(a.id),
+            "user_id": str(a.user_id),
+            "full_name": a.user.full_name if a.user else "Unknown",
+            "email": a.user.email if a.user else "Unknown",
+            "profile_image_url": a.user.profile.profile_image_url if a.user and a.user.profile else None,
+            "phone_number": a.phone_number,
+            "experience_years": a.experience_years,
+            "about": a.about,
+            "specializations": a.specializations,
+            "certifications": a.certifications,
+            "hourly_rate": a.hourly_rate,
+            "status": a.status,
+            "submitted_at": a.submitted_at.isoformat(),
+            "reviewed_at": a.reviewed_at.isoformat() if a.reviewed_at else None,
+        }
+        
+        # Inject old profile data for diffing in the frontend
+        if include_diff and a.user and a.user.profile:
+            data["old_experience_years"] = a.user.profile.experience_years
+            data["old_specializations"] = a.user.profile.specializations
+            # certifications might not exist on the old profile, handling safely
+            data["old_certifications"] = getattr(a.user.profile, 'certifications', 'None')
+            
+        return data
+
+    async def resolve_trainer_application(self, db: AsyncSession, user_id: str, approve: bool, admin: User) -> dict:
+        user_uuid = uuid.UUID(user_id)
+        
+        user_result = await db.execute(select(User).where(User.id == user_uuid).options(selectinload(User.profile)))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise NotFoundError("User")
+
+        app_result = await db.execute(select(TrainerApplication).where(TrainerApplication.user_id == user_uuid))
+        app = app_result.scalar_one_or_none()
+        if not app:
+            raise NotFoundError("Application")
+
+        app.status = "approved" if approve else "rejected"
+        app.reviewed_at = datetime.now(timezone.utc)
+
+        if approve:
+            if user.role != UserRole.TRAINER:
+                # 1. New Admission: Upgrade role
+                user.role = UserRole.TRAINER
+                user.trainer_status = TrainerStatus.APPROVED
+            else:
+                # 2. Profile Update: Sync sensitive fields to live profile
+                if user.profile:
+                    user.profile.specializations = app.specializations
+                    user.profile.experience_years = app.experience_years
+                    if hasattr(user.profile, 'certifications'):
+                        user.profile.certifications = app.certifications
+        else:
+            if user.role != UserRole.TRAINER:
+                user.trainer_status = TrainerStatus.REJECTED
+
+        await db.flush()
+        return {"status": app.status, "role": user.role.value}
 
     async def get_reports(self, db: AsyncSession, status: str | None = None) -> dict:
         query = select(Report).options(
@@ -232,6 +290,5 @@ class AdminService:
                 "streak_days": streak,
             }
         }
-
 
 admin_service = AdminService()

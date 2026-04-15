@@ -58,6 +58,7 @@ class UserProfile(Base):
     )
 
     # Trainer-specific
+    certifications: Mapped[str | None] = mapped_column(String(500), nullable=True) 
     specializations: Mapped[str | None] = mapped_column(String(500), nullable=True)  # comma-separated
     experience_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

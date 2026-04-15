@@ -15,9 +15,9 @@ class AdminRemoteDataSource {
     }
   }
 
-Future<Map<String, dynamic>> getTrainerApplications({String? status}) async {
+  Future<Map<String, dynamic>> getNewAdmissions({String? status}) async {
     try {
-      final res = await dio.get(ApiConstants.adminTrainerApplications,
+      final res = await dio.get(ApiConstants.adminNewAdmissions, // Use specific constant
           queryParameters: status != null ? {'status': status} : null);
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
@@ -25,11 +25,20 @@ Future<Map<String, dynamic>> getTrainerApplications({String? status}) async {
     }
   }
 
- Future<void> approveTrainer(String userId, bool approve) async {
+  Future<Map<String, dynamic>> getProfileUpdates({String? status}) async {
+    try {
+      final res = await dio.get(ApiConstants.adminProfileUpdates, // Use specific constant
+          queryParameters: status != null ? {'status': status} : null);
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw mapDioError(e);
+    }
+  }
+
+  Future<void> approveTrainer(String userId, bool approve) async {
     try {
       await dio.post(
           '${ApiConstants.adminTrainerApplications}/$userId/approve',
-          // 🔥 FIX: Added 'user_id' back into the JSON payload so Pydantic stops crashing
           data: {'user_id': userId, 'approve': approve}); 
     } on DioException catch (e) {
       throw mapDioError(e);

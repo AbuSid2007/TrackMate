@@ -66,7 +66,7 @@ class MessageResponse(BaseModel):
 
 class ApproveTrainerRequest(BaseModel):
     user_id: uuid.UUID
-    approve: bool  # True = approve, False = reject
+    approve: bool = Field(..., description="True to approve, False to reject/revoke")
     
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
