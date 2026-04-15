@@ -20,7 +20,6 @@ class SocialService:
         if str(sender.id) == str(receiver_id):
             raise ConflictError("Cannot send friend request to yourself")
 
-        # Check if already friends or pending
         existing = await db.execute(
             select(FriendRequest).where(
                 or_(
@@ -73,6 +72,15 @@ class SocialService:
                 f"{user.full_name} accepted your friend request",
                 reference_id=str(req.id),
             )
+            
+            # 🔥 NEW: Automatically start a chat and send a system message
+            from app.services.messaging_service import messaging_service
+            conv = await messaging_service.get_or_create_conversation(db, user.id, req.sender_id)
+            await messaging_service.save_message(
+                db, conv.id, user.id, 
+                "System: You are now friends! Say hi to your new friend."
+            )
+            
         return req
 
     async def get_friends(self, db: AsyncSession, user_id: uuid.UUID) -> list[User]:
@@ -107,7 +115,17 @@ class SocialService:
         req = result.scalar_one_or_none()
         if not req:
             raise NotFoundError("Friendship")
+            
         await db.delete(req)
+        
+        # 🔥 NEW: Automatically send a separation system message
+        from app.services.messaging_service import messaging_service
+        conv = await messaging_service.get_or_create_conversation(db, user_id, friend_id)
+        await messaging_service.save_message(
+            db, conv.id, user_id, 
+            "System: You are no longer friends."
+        )
+        
         await db.flush()
 
     async def get_pending_requests(self, db: AsyncSession, user_id: uuid.UUID) -> list[FriendRequest]:

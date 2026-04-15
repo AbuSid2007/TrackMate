@@ -98,7 +98,6 @@ class TrainerService:
         if requires_review:
             app.status = "pending"
 
-        # Sync profile updates 
         from app.services.profile_service import profile_service
         from app.schemas.profile import ProfileUpdateRequest
         from app.models.user import User as UserModel
@@ -214,6 +213,15 @@ class TrainerService:
                 f"{trainer.full_name} accepted your request",
                 reference_id=str(req.id),
             )
+            
+            # 🔥 NEW: Automatically start a chat and send a system message
+            from app.services.messaging_service import messaging_service
+            conv = await messaging_service.get_or_create_conversation(db, req.trainee_id, trainer.id)
+            await messaging_service.save_message(
+                db, conv.id, trainer.id, 
+                "System: Trainer request accepted! Say hi to your new trainer."
+            )
+            
         else:
             await notification_service.create(
                 db, req.trainee_id, NotificationType.TRAINER_REJECTED,
@@ -256,6 +264,7 @@ class TrainerService:
         )
         
         try:
+            # 🔥 Send the separation message
             from app.services.messaging_service import messaging_service
             conv = await messaging_service.get_or_create_conversation(db, trainee.id, old_trainer_id)
             await messaging_service.save_message(
