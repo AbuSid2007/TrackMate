@@ -224,13 +224,25 @@ class TrainerService:
             )
             .values(status=TrainerRequestStatus.REJECTED)
         )
+
+        now_utc = datetime.now(timezone.utc)
+        await db.execute(
+            TrainerSession.__table__.delete()
+            .where(
+                and_(
+                    TrainerSession.trainee_id == trainee.id,
+                    TrainerSession.trainer_id == old_trainer_id,
+                    TrainerSession.scheduled_at > now_utc
+                )
+            )
+        )
         
         try:
             from app.services.messaging_service import messaging_service
             conv = await messaging_service.get_or_create_conversation(db, trainee.id, old_trainer_id)
             await messaging_service.save_message(
                 db, conv.id, trainee.id, 
-                "System: The training relationship has been terminated."
+                "System: The training relationship has been terminated. All future sessions have been cancelled."
             )
         except Exception:
             pass 
