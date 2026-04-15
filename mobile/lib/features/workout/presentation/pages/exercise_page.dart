@@ -496,15 +496,17 @@ class _GymSessionPageState extends State<GymSessionPage> {
     
     _totalCaloriesBurned += setCalories;
 
+    final newSet = {
+      'exercise': _selectedExercise!['name'],
+      'reps': reps,
+      'weight': weight,
+      'duration_seconds': duration,
+      'isTime': isTime,
+      'calories_added': setCalories,
+    };
+
     setState(() {
-      _sets.add({
-        'exercise': _selectedExercise!['name'],
-        'reps': reps,
-        'weight': weight,
-        'duration_seconds': duration,
-        'isTime': isTime,
-        'calories_added': setCalories,
-      });
+      _sets.add(newSet);
       _repsCtrl.clear();
       _weightCtrl.clear();
       _durationCtrl.clear();
@@ -512,13 +514,23 @@ class _GymSessionPageState extends State<GymSessionPage> {
 
     try {
       await widget.ds.logSet(_sessionId!, {
-        'exercise_id': "00000000-0000-0000-0000-000000000000",
+        'exercise_id': _selectedExercise!['id'],
         'set_number': _sets.length,
         'reps': reps,
         'weight_kg': weight,
         'duration_seconds': duration,
       });
-    } catch (_) {}
+    } catch (e) {
+      setState(() {
+        _sets.removeLast();
+        _totalCaloriesBurned -= setCalories;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to log set. Please try again.')),
+        );
+      }
+    }
   }
 
   Future<void> _finish() async {

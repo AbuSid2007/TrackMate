@@ -31,7 +31,7 @@ class FinishSessionRequest(BaseModel):
     calories_burned: Optional[float] = Field(default=None, ge=0, le=20000)
 
 class LogSetRequest(BaseModel):
-    exercise_id: uuid.UUID
+    exercise_id: str
     set_number: int = Field(..., ge=1, le=200)
     reps: Optional[int] = Field(default=None, ge=0, le=1000)
     weight_kg: Optional[float] = Field(default=None, ge=0, le=2000)
@@ -151,8 +151,8 @@ async def log_set(
             "reps": workout_set.reps,
             "weight_kg": workout_set.weight_kg,
         }
-    except Exception:
-        return {"message": "Set logged locally"}
+    except Exception as e:
+        return {"message": f"Set logged locally. {str(e)}"}
 
 
 @router.delete("/workouts/sets/{set_id}", status_code=status.HTTP_200_OK)

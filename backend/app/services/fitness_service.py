@@ -122,13 +122,49 @@ class FitnessService:
 
     async def log_set(
         self, db: AsyncSession, session_id: uuid.UUID, user_id: uuid.UUID,
-        exercise_id: uuid.UUID, set_number: int,
+        exercise_id_str: str, set_number: int,
         reps: int | None, weight_kg: float | None,
         duration_seconds: int | None, notes: str | None
     ) -> WorkoutSet:
         await self._get_session(db, session_id, user_id)
+        
+        try:
+            exercise_uuid = uuid.UUID(exercise_id_str)
+        except ValueError:
+            frontend_mapping = {
+                "1": "Barbell Squat",
+                "2": "Push-up",
+                "3": "Deadlift",
+                "4": "Pull-up",
+                "5": "Plank",
+                "6": "Running",
+                "7": "Dumbbell Bicep Curl",
+                "8": "Burpee",
+                "9": "Russian Twist",
+                "10": "Lunges"
+            }
+            ex_name = frontend_mapping.get(str(exercise_id_str), "Custom Exercise")
+            
+            result = await db.execute(select(Exercise).where(Exercise.name == ex_name))
+            ex = result.scalar_one_or_none()
+            
+            if not ex:
+                ex = Exercise(name=ex_name, category="strength", measurement_type="reps", created_by=user_id)
+                db.add(ex)
+                await db.flush()
+                await db.refresh(ex)
+                
+            exercise_uuid = ex.id
+        else:
+            result = await db.execute(select(Exercise).where(Exercise.id == exercise_uuid))
+            ex = result.scalar_one_or_none()
+            if not ex:
+                ex = Exercise(id=exercise_uuid, name="Custom Exercise", category="strength", measurement_type="reps", created_by=user_id)
+                db.add(ex)
+                await db.flush()
+
         workout_set = WorkoutSet(
-            session_id=session_id, exercise_id=exercise_id,
+            session_id=session_id, exercise_id=exercise_uuid,
             set_number=set_number, reps=reps, weight_kg=weight_kg,
             duration_seconds=duration_seconds, notes=notes,
         )
